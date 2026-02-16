@@ -1,0 +1,210 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Pipeline Wizard – Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+# Edit this file to customise guardrails, retry behaviour, and ECS validation
+# without touching Python code.  The wizard loads it once at import time via
+# config.load_config().
+
+# ── Retry limits ──────────────────────────────────────────────────────────────
+max_guardrail_retries: 3
+max_simulation_retries: 3
+
+# ── Forbidden processors ─────────────────────────────────────────────────────
+# These processor types will be rejected by the guardrails checker.
+# Add or remove entries as company policy evolves.
+forbidden_processors:
+  - script       # security risk in production
+  - drop         # data-loss risk – should be explicit in routing
+  - pipeline     # nested pipelines are hard to maintain
+
+# ── Processor phase ordering ─────────────────────────────────────────────────
+# Processors MUST appear in this phase order: parse → transform → calculate.
+# Within each phase the order is free.
+processor_phases:
+  parse:
+    - dissect
+    - grok
+    - csv
+    - json
+    - kv
+    - uri_parts
+    - user_agent
+    - gsub  # Allowed in parse phase for pre-cleaning
+
+  transform:
+    - rename
+    - remove
+    - set
+    - convert
+    # gsub moved to parse
+    - lowercase
+    - uppercase
+    - trim
+    - split
+    - join
+    - sort
+    - dot_expander
+    - date
+
+  calculate:
+    - enrich
+    - geo_ip
+    - append
+    - bytes
+    - community_id
+    - fingerprint
+    - network_direction
+    - registered_domain
+    - url_decode
+
+# ── ECS namespaces ───────────────────────────────────────────────────────────
+# Recognised top-level ECS namespace prefixes.  Fields whose first dotted
+# segment is NOT in this list (and is not a well-known bare field like
+# "message") will trigger a warning.
+ecs_namespaces:
+  - agent
+  - as
+  - client
+  - cloud
+  - container
+  - destination
+  - dll
+  - dns
+  - ecs
+  - error
+  - event
+  - file
+  - geo
+  - group
+  - hash
+  - host
+  - http
+  - labels
+  - log
+  - network
+  - observer
+  - organization
+  - os
+  - package
+  - pe
+  - process
+  - registry
+  - related
+  - rule
+  - server
+  - service
+  - source
+  - threat
+  - tls
+  - url
+  - user
+  - user_agent
+  - vulnerability
+
+# ── ECS field catalog ────────────────────────────────────────────────────────
+# A subset of the Elastic Common Schema used for validation.
+# In production you can replace this with the full generated schema from
+# https://github.com/elastic/ecs/tree/main/generated/elasticsearch
+#
+# Format:  field.name: { type: <es_type>, required: true|false }
+ecs_field_catalog:
+  # Base
+  "@timestamp":                  { type: date,    required: true }
+  message:                       { type: text,    required: false }
+  tags:                          { type: keyword, required: false }
+  labels:                        { type: object,  required: false }
+  # Agent
+  agent.id:                      { type: keyword }
+  agent.name:                    { type: keyword }
+  agent.type:                    { type: keyword }
+  agent.version:                 { type: keyword }
+  # Client / Server / Source / Destination
+  client.ip:                     { type: ip }
+  client.port:                   { type: long }
+  client.bytes:                  { type: long }
+  server.ip:                     { type: ip }
+  server.port:                   { type: long }
+  server.bytes:                  { type: long }
+  source.ip:                     { type: ip }
+  source.port:                   { type: long }
+  source.bytes:                  { type: long }
+  destination.ip:                { type: ip }
+  destination.port:              { type: long }
+  destination.bytes:             { type: long }
+  # Event
+  event.action:                  { type: keyword }
+  event.category:                { type: keyword }
+  event.created:                 { type: date }
+  event.dataset:                 { type: keyword }
+  event.duration:                { type: long }
+  event.id:                      { type: keyword }
+  event.kind:                    { type: keyword }
+  event.module:                  { type: keyword }
+  event.original:                { type: keyword }
+  event.outcome:                 { type: keyword }
+  event.severity:                { type: long }
+  event.type:                    { type: keyword }
+  # Host
+  host.hostname:                 { type: keyword }
+  host.ip:                       { type: ip }
+  host.name:                     { type: keyword }
+  host.os.family:                { type: keyword }
+  host.os.name:                  { type: keyword }
+  host.os.version:               { type: keyword }
+  # HTTP
+  http.request.method:           { type: keyword }
+  http.request.body.content:     { type: wildcard }
+  http.response.status_code:     { type: long }
+  http.response.body.content:    { type: wildcard }
+  http.version:                  { type: keyword }
+  # Log
+  log.level:                     { type: keyword }
+  log.logger:                    { type: keyword }
+  log.origin.file.name:          { type: keyword }
+  log.origin.function:           { type: keyword }
+  # Network
+  network.bytes:                 { type: long }
+  network.direction:             { type: keyword }
+  network.protocol:              { type: keyword }
+  network.transport:             { type: keyword }
+  network.type:                  { type: keyword }
+  # Observer
+  observer.hostname:             { type: keyword }
+  observer.ip:                   { type: ip }
+  observer.name:                 { type: keyword }
+  observer.type:                 { type: keyword }
+  # Process
+  process.args:                  { type: keyword }
+  process.executable:            { type: keyword }
+  process.name:                  { type: keyword }
+  process.pid:                   { type: long }
+  # URL
+  url.domain:                    { type: keyword }
+  url.full:                      { type: wildcard }
+  url.original:                  { type: wildcard }
+  url.path:                      { type: wildcard }
+  url.port:                      { type: long }
+  url.query:                     { type: keyword }
+  url.scheme:                    { type: keyword }
+  # User
+  user.email:                    { type: keyword }
+  user.id:                       { type: keyword }
+  user.name:                     { type: keyword }
+  # User Agent
+  user_agent.name:               { type: keyword }
+  user_agent.original:           { type: keyword }
+  user_agent.version:            { type: keyword }
+  # File
+  file.name:                     { type: keyword }
+  file.path:                     { type: keyword }
+  file.size:                     { type: long }
+  file.extension:                { type: keyword }
+  # Error
+  error.code:                    { type: keyword }
+  error.message:                 { type: text }
+  error.stack_trace:             { type: wildcard }
+  # Related
+  related.ip:                    { type: ip }
+  related.user:                  { type: keyword }
+  related.hash:                  { type: keyword }
+  related.hosts:                 { type: keyword }

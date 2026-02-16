@@ -1,0 +1,27 @@
+[project]
+name = "pipeline-wizard"
+version = "0.1.0"
+description = "Elasticsearch ingest pipeline generation & validation wizard built with LangGraph"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.2.60",
+    "langgraph-cli[inmem]>=0.1.55",
+    "langchain-openai>=0.3.0",
+    "langchain-core>=0.3.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Uncomment when using a real MCP client
+mcp = [
+    "langchain-mcp-adapters>=0.1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.backends._legacy:_Backend"

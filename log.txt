@@ -1,0 +1,983 @@
+
+
+--- Simulation Result ---
+[
+  {
+    "type": "text",
+    "text": "{\n  \"error\": {\n    \"root_cause\": [\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\",\n        \"suppressed\": [\n          {\n            \"type\": \"parse_exception\",\n            \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n            \"processor_type\": \"rename\"\n          },\n          {\n            \"type\": \"parse_exception\",\n            \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n            \"processor_type\": \"rename\"\n          },\n          {\n            \"type\": \"parse_exception\",\n            \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n            \"processor_type\": \"rename\"\n          },\n          {\n            \"type\": \"parse_exception\",\n            \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n            \"processor_type\": \"rename\"\n          },\n          {\n            \"type\": \"parse_exception\",\n            \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n            \"processor_type\": \"rename\"\n          },\n          {\n            \"type\": \"parse_exception\",\n            \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n            \"processor_type\": \"rename\"\n          },\n          {\n            \"type\": \"parse_exception\",\n            \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n            \"processor_type\": \"rename\"\n          }\n        ]\n      }\n    ],\n    \"type\": \"parse_exception\",\n    \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n    \"processor_type\": \"rename\",\n    \"suppressed\": [\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\"\n      },\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\"\n      },\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\"\n      },\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\"\n      },\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\"\n      },\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\"\n      },\n      {\n        \"type\": \"parse_exception\",\n        \"reason\": \"processor [rename] doesn't support one or more provided configuration parameters [to]\",\n        \"processor_type\": \"rename\"\n      }\n    ]\n  },\n  \"status\": 400\n}",
+    "id": "lc_1b09ddc1-e13b-4035-8293-41d85e315e43"
+  }
+]
+-------------------------
+Extracted Errors: []
+
+
+--- Simulation Result ---
+{
+  "error": {
+    "root_cause": [
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename",
+        "suppressed": [
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          }
+        ]
+      }
+    ],
+    "type": "parse_exception",
+    "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+    "processor_type": "rename",
+    "suppressed": [
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      }
+    ]
+  },
+  "status": 400
+}
+-------------------------
+Extracted Errors: ["Pipeline Error: processor [rename] doesn't support one or more provided configuration parameters [to] (Details: processor [rename] doesn't support one or more provided configuration parameters [to])", "Found parse_exception: processor [rename] doesn't support one or more provided configuration parameters [to]"]
+
+
+--- Simulation Result ---
+{
+  "error": {
+    "root_cause": [
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename",
+        "suppressed": [
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          }
+        ]
+      }
+    ],
+    "type": "parse_exception",
+    "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+    "processor_type": "rename",
+    "suppressed": [
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      }
+    ]
+  },
+  "status": 400
+}
+-------------------------
+Extracted Errors: ["Pipeline Error: processor [rename] doesn't support one or more provided configuration parameters [to] (Details: processor [rename] doesn't support one or more provided configuration parameters [to])", "Found parse_exception: processor [rename] doesn't support one or more provided configuration parameters [to]"]
+
+--- Routing Check ---
+Errors found: 2
+Retry count: 3 / 3
+Decision: pass_with_warnings (max retries exceeded)
+
+
+--- Simulation Result ---
+{
+  "error": {
+    "root_cause": [
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename",
+        "suppressed": [
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          },
+          {
+            "type": "parse_exception",
+            "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+            "processor_type": "rename"
+          }
+        ]
+      }
+    ],
+    "type": "parse_exception",
+    "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+    "processor_type": "rename",
+    "suppressed": [
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      },
+      {
+        "type": "parse_exception",
+        "reason": "processor [rename] doesn't support one or more provided configuration parameters [to]",
+        "processor_type": "rename"
+      }
+    ]
+  },
+  "status": 400
+}
+-------------------------
+Extracted Errors: ["Pipeline Error: processor [rename] doesn't support one or more provided configuration parameters [to] (Details: processor [rename] doesn't support one or more provided configuration parameters [to])", "Found parse_exception: processor [rename] doesn't support one or more provided configuration parameters [to]"]
+
+--- Routing Check ---
+Errors found: 2
+Retry count: 3 / 3
+Decision: pass_with_warnings (errors > 0 but max retries exceeded)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "message_content": "",
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "log": {
+            "original": "2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \\\"Mozilla/5.0\\\"",
+            "level": "INFO"
+          },
+          "timestamp_str": "2024-01-15T10:23:45.123Z",
+          "tags": [
+            "_rename_failure"
+          ]
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T08:09:41.173527542Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ["Doc 0: failure tags: ['_rename_failure']"]
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "log": {
+            "original": "2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \\\"Mozilla/5.0\\\"",
+            "level": "INFO"
+          },
+          "timestamp_str": "2024-01-15T10:23:45.123Z",
+          "event": {
+            "action": ""
+          },
+          "tags": [
+            "_dissect_message_failure"
+          ]
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T08:09:44.174663502Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ["Doc 0: failure tags: ['_dissect_message_failure']"]
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 1 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "log": {
+            "original": "2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \\\"Mozilla/5.0\\\"",
+            "level": "INFO"
+          },
+          "timestamp_str": "2024-01-15T10:23:45.123Z",
+          "http": {
+            "response": {
+              "duration": ""
+            }
+          },
+          "event": {
+            "action": ""
+          },
+          "tags": [
+            "_dissect_message_failure"
+          ]
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T08:09:46.035883711Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ["Doc 0: failure tags: ['_dissect_message_failure']"]
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 2 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "log": {
+            "original": "2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \\\"Mozilla/5.0\\\"",
+            "level": "INFO",
+            "logger": ""
+          },
+          "timestamp_str": "2024-01-15T10:23:45.123Z",
+          "http": {
+            "request": {
+              "path": "GET",
+              "method": "192.168.1.100"
+            },
+            "response": {
+              "duration": "",
+              "status_code": "/api/users"
+            }
+          },
+          "source": {
+            "ip": "[web-server]"
+          },
+          "event": {
+            "action": "192.168.1.100"
+          },
+          "user_agent": {
+            "original": "45ms \"Mozilla/5.0\""
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T08:09:47.648721754Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 3 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "message": "2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\"",
+          "event": {
+            "action": "[web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\""
+          },
+          "log": {
+            "level": "INFO"
+          },
+          "labels": {
+            "service": ""
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T08:20:44.687534461Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 0 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "client": {
+            "ip": "INFO"
+          },
+          "http": {
+            "request": {
+              "method": ""
+            },
+            "response": {
+              "status_code": "192.168.1.100"
+            }
+          },
+          "url": {
+            "path": "[web-server]"
+          },
+          "labels": {
+            "duration_ms": "GET /api/users 200 45ms \"Mozilla/5.0\""
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T08:28:19.31222138Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 0 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "find_match",
+            "reason": "Unable to find match for dissect pattern: %{timestamp_str} %{log.level} %{service.name} %{user_agent.original} - %{client.ip} against source: 2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\""
+          }
+        ],
+        "type": "find_match",
+        "reason": "Unable to find match for dissect pattern: %{timestamp_str} %{log.level} %{service.name} %{user_agent.original} - %{client.ip} against source: 2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\""
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: Unable to find match for dissect pattern: %{timestamp_str} %{log.level} %{service.name} %{user_agent.original} - %{client.ip} against source: 2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms "Mozilla/5.0"']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "log": {
+            "level": "INFO "
+          },
+          "http": {
+            "request": {
+              "path": "/api/users",
+              "method": "GET"
+            },
+            "response": {
+              "status_code": "200"
+            }
+          },
+          "client": {
+            "ip": "192.168.1.100"
+          },
+          "message": "2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\"",
+          "user_agent": {
+            "original": "Mozilla/5.0"
+          },
+          "labels": {
+            "duration_ms": "45",
+            "service": "web-server"
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T08:44:42.46138496Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 1 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "message": "2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\"",
+          "event": {
+            "dataset": "placeholder"
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-13T09:13:49.56978563Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 0 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "error": "All connection attempts failed"
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: All connection attempts failed']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "error": "All connection attempts failed"
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: All connection attempts failed']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "error": "All connection attempts failed"
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: All connection attempts failed']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 1 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "error": "All connection attempts failed"
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: All connection attempts failed']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 2 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "error": "All connection attempts failed"
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: All connection attempts failed']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 3 / 3
+Decision: pass_with_warnings (errors > 0 but max retries exceeded)
+
+
+--- Simulation Result ---
+{
+  "error": ""
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: ']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "error": ""
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: ']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 1 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "error": ""
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: ']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 2 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "error": ""
+}
+-------------------------
+Extracted Errors: ['Pipeline Error: ']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 3 / 3
+Decision: pass_with_warnings (errors > 0 but max retries exceeded)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "message": "024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\"",
+          "event": {
+            "ingested": true
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-16T06:59:30.250991677Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 0 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "unable to parse date [024-01-15T10:23:45.123Z]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "unable to parse date [024-01-15T10:23:45.123Z]",
+        "caused_by": {
+          "type": "illegal_argument_exception",
+          "reason": "failed to parse date field [024-01-15T10:23:45.123Z] with format [yyyy-MM-dd'T'HH:mm:ss.SSS'Z']",
+          "caused_by": {
+            "type": "date_time_parse_exception",
+            "reason": "Text '024-01-15T10:23:45.123Z' could not be parsed at index 0"
+          }
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: unable to parse date [024-01-15T10:23:45.123Z]', "Found date_time_parse_exception: Text '024-01-15T10:23:45.123Z' could not be parsed at index 0"]
+
+--- Routing Check ---
+Errors found: 2
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2024-01-15T10:23:45.123Z",
+          "log": {
+            "level": "INFO"
+          },
+          "service": {
+            "name": "web-server"
+          },
+          "http": {
+            "request": {
+              "method": "GET"
+            },
+            "response": {
+              "status_code": "200"
+            }
+          },
+          "client": {
+            "ip": "192.168.1.100"
+          },
+          "message": "024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\"",
+          "url": {
+            "path": "/api/users"
+          },
+          "user_agent": {
+            "original": "Mozilla/5.0"
+          },
+          "labels": {
+            "duration_ms": 45
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-16T07:12:09.313335209Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 1 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "unable to parse date [024-01-15T10:23:45.123Z]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "unable to parse date [024-01-15T10:23:45.123Z]",
+        "caused_by": {
+          "type": "illegal_argument_exception",
+          "reason": "failed to parse date field [024-01-15T10:23:45.123Z] with format [yyyy-MM-dd'T'HH:mm:ss.SSS'Z']",
+          "caused_by": {
+            "type": "date_time_parse_exception",
+            "reason": "Text '024-01-15T10:23:45.123Z' could not be parsed at index 0"
+          }
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: unable to parse date [024-01-15T10:23:45.123Z]', "Found date_time_parse_exception: Text '024-01-15T10:23:45.123Z' could not be parsed at index 0"]
+
+--- Routing Check ---
+Errors found: 2
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "0024-01-15T10:23:45.123Z",
+          "log": {
+            "level": "INFO"
+          },
+          "service": {
+            "name": "web-server"
+          },
+          "http": {
+            "request": {
+              "method": "GET"
+            },
+            "response": {
+              "status_code": "200"
+            }
+          },
+          "client": {
+            "ip": "192.168.1.100"
+          },
+          "message": "024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms \"Mozilla/5.0\"",
+          "url": {
+            "path": "/api/users"
+          },
+          "user_agent": {
+            "original": "Mozilla/5.0"
+          },
+          "labels": {
+            "duration_ms": 45
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-16T07:15:36.278663847Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 1 / 3
+Decision: pass (no errors)
