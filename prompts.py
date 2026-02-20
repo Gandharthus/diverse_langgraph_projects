@@ -78,40 +78,55 @@ _GENERATION_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent("""\
     The pipeline must be tailored *specifically* and *exclusively* to ingest the samples provided.
     Do not add logic for hypothetical variations.
 
-    ## Company best practices (MUST follow)
+    ## Production rules (MUST follow)
 
-    1. **Prefer `dissect` over `grok`.**
-       `dissect` is deterministic and faster. Only fall back to `grok` when
-       the log format genuinely requires regex (variable-length optional
-       fields, alternation, etc.). Justify every use of `grok` in a comment
-       inside the processor's `description` field.
-       **CRITICAL**: When using `dissect`, the pattern MUST match the entire log line structure.
-       - Every delimiter (spaces, brackets, quotes) in the log must be present in the pattern.
-       - Do not skip fields structure. Capture all parts of the message.
+    1. **Preserve the raw log line.**
+       Keep the original raw log line in `event.original` (preferred) or keep `message` intact.
+       Never delete `message` unless the raw line has been copied to `event.original`.
+       Never overwrite `message` with a parsed application message.
 
-    2. **Flexible Processor Ordering.**
-       While it is generally good practice to parse, then transform, then enrich,
-       you MAY order processors as needed to achieve the desired outcome.
-       For example, you might use `gsub` to clean a message before `dissect`,
-       or `rename`/`remove` fields at the end of the pipeline.
+    2. **Single primary parse pass.**
+       Choose ONE primary parsing processor per format (grok OR dissect OR json).
+       Avoid sequential parsing of the same source field (no multiple grok/dissect passes).
+       If the format has variants, handle them within a single parsing strategy.
 
-    3. **ECS Compliance.**
+    3. **Parser choice rubric.**
+       - If the sample line is JSON, use the `json` processor.
+       - If the format is strict delimiter-based with no quoted strings containing spaces, use `dissect`.
+       - If fields are optional, reordered, or contain quoted strings with spaces, use `grok`.
+       - If quoted strings contain spaces, do NOT use naive `dissect` patterns; use `grok` or quote-safe `dissect` with quoted field delimiters.
+
+    4. **Types.**
+       Convert numeric fields used for aggregations (status, duration, retry, bytes, size, count, etc.) to numeric types.
+       Use grok type hints (e.g., `:int`, `:long`) or `convert` processors.
+
+    5. **Minimalism.**
+       Avoid scripts unless absolutely necessary.
+       Avoid many alternative grok patterns unless the format truly varies.
+
+    6. **Naming hygiene.**
+       Do not reuse `message` as a parsed “app message”.
+       If you extract an application message, write it to `log.message` or `labels.msg`.
+
+    7. **Consistency.**
+       Keep field names stable and avoid writing the same semantic field to multiple paths.
+
+    8. **ECS Compliance.**
        Output field names should conform to the Elastic Common Schema (ECS) where possible.
        Use `labels.*` for custom fields that do not fit into standard ECS fields.
-       (e.g., `labels.duration_ms`).
        **CRITICAL**: Map ALL available information.
        - If the log contains a log level, map it to `log.level`.
        - If the log contains a user agent, map it to `user_agent.original`.
        - If the log contains a service name, map it to `service.name` (or `labels.service`).
 
-    4. **Forbidden processors.**
+    9. **Forbidden processors.**
        Do NOT use any of: {forbidden}.
 
-    5. **Error handling.**
-       Processors MAY include an `on_failure` clause if necessary, but it is not mandatory.
+    10. **Error handling.**
+        Processors MAY include an `on_failure` clause if necessary, but it is not mandatory.
 
-    6. **`@timestamp`.**
-       Always produce a `@timestamp` field using the `date` processor.
+    11. **`@timestamp`.**
+        Always produce a `@timestamp` field using the `date` processor.
 
     ## Output format
 
@@ -158,10 +173,12 @@ _GUARDRAIL_FIX_TEMPLATE = textwrap.dedent("""\
     {errors}
 
     ## Reminder
-    - Prefer `dissect` over `grok`.
-    - Processor order: parse → transform → calculate.
-    - All fields must be ECS-compliant.
-    - Forbidden processors: {forbidden}.
+    - Preserve raw log line in `event.original` or keep `message` intact.
+    - Use a single primary parse step and avoid sequential parsing of the same field.
+    - Choose json vs dissect vs grok using the rubric from the system prompt.
+    - Convert numeric fields to numeric types.
+    - Keep parsed app message in `log.message` or `labels.msg`, not `message`.
+    - Avoid scripts and forbidden processors: {forbidden}.
 """)
 
 
@@ -184,8 +201,10 @@ _SIMULATION_FIX_TEMPLATE = textwrap.dedent("""\
     ```
 
     ## Reminder
-    - Prefer `dissect` over `grok`.
-    - Processor order: parse → transform → calculate.
-    - All fields must be ECS-compliant.
-    - Forbidden processors: {forbidden}.
+    - Preserve raw log line in `event.original` or keep `message` intact.
+    - Use a single primary parse step and avoid sequential parsing of the same field.
+    - Choose json vs dissect vs grok using the rubric from the system prompt.
+    - Convert numeric fields to numeric types.
+    - Keep parsed app message in `log.message` or `labels.msg`, not `message`.
+    - Avoid scripts and forbidden processors: {forbidden}.
 """)

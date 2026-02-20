@@ -1,7 +1,8 @@
 {
   "$schema": "https://langgra.ph/schema.json",
   "graphs": {
-    "pipeline_wizard": "./graph.py:graph"
+    "pipeline_wizard": "./graph.py:graph",
+    "search_agent": "./search_graph.py:graph"
   },
   "env": ".env",
   "python_version": "3.11",

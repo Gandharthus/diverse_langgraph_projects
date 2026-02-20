@@ -1,17 +1,13 @@
 """
-LangGraph Dev Server Entry Point
-=================================
+LangGraph Dev Server Entry Point – Search Agent
+=================================================
 
 This module exposes the compiled ``graph`` object that ``langgraph dev``
-expects.  It wires up the chatmodel and MCP client from environment
-variables so the graph can be constructed at import time.
+expects for the search agent.
 
 The ``langgraph.json`` config references this file as:
 
-    "graphs": { "pipeline_wizard": "graph.py:graph" }
-
-When you run ``langgraph dev``, it imports this module, picks up the
-``graph`` variable, and serves it with Studio.
+    "graphs": { ..., "search_agent": "search_graph.py:graph" }
 """
 
 from __future__ import annotations
@@ -20,27 +16,27 @@ import os
 import logging
 
 from langchain_openai import ChatOpenAI
-from pipeline_wizard import build_pipeline_wizard_graph
+from search_agent import build_search_agent_graph
 
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 1. Configure the LLM (Switched to Groq)
+# 1. Configure the LLM (same provider as pipeline wizard)
 # ──────────────────────────────────────────────────────────────────────────────
 _groq_api_key = os.environ.get("GROQ_API_KEY")
 if not _groq_api_key:
     raise RuntimeError("GROQ_API_KEY environment variable is not set")
 
 chatmodel = ChatOpenAI(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
     temperature=0,
     api_key=_groq_api_key,
-    base_url="https://api.groq.com/openai/v1"
+    base_url="https://api.groq.com/openai/v1",
 )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 2. Configure the MCP client
+# 2. Configure the MCP client (search-specific tools)
 # ──────────────────────────────────────────────────────────────────────────────
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -54,11 +50,10 @@ MCP_CLIENT = MultiServerMCPClient(
     }
 )
 
-logger.info("Using real MCP client via mcp_server.py")
+logger.info("Search agent using MCP client via mcp_server.py")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. Build and expose the compiled graph
 # ──────────────────────────────────────────────────────────────────────────────
-# This is the variable that langgraph.json references via "graph.py:graph"
-graph = build_pipeline_wizard_graph(chatmodel=chatmodel, mcp_client=MCP_CLIENT)
+graph = build_search_agent_graph(chatmodel=chatmodel, mcp_client=MCP_CLIENT)

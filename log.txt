@@ -981,3 +981,351 @@ Extracted Errors: []
 Errors found: 0
 Retry count: 1 / 3
 Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2026-02-19T14:01:12.431Z",
+          "log": {
+            "level": "INFO"
+          },
+          "service": {
+            "name": ""
+          },
+          "timestamp_str": "2026-02-19T14:01:12.431Z",
+          "http": {
+            "request": {
+              "method": "POST"
+            },
+            "response": {
+              "status_code": "200"
+            }
+          },
+          "url": {
+            "path": "/payments/authorize"
+          },
+          "labels": {
+            "duration_ms": "183",
+            "txn_id": "T-78421",
+            "trace_id": "4f2c9b1b9b3a4e2c",
+            "user_id": "U123",
+            "channel": "web\n\n2026-02-19T14:01:13.044Z ERROR payments-api env=prod region=eu-west-3 trace_id=7a1d3f9c2b8e41a2 user_id=U991 txn_id=T-78422 method=POST path=/payments/authorize status=502 duration_ms=2870 err=\"UpstreamTimeout\" msg=\"gateway timeout after 2.8s\" upstream=risk-service retry=1\n\n2026-02-19T14:01:13.201Z ERROR payments-api env=prod region=eu-west-3 trace_id=a9c0f3c1f0b54b0f user_id=U456 txn_id=T-78423 method=POST path=/payments/authorize status=500 duration_ms=412 err=\"DBDeadlock\" msg=\"deadlock detected\" db=core-ledger",
+            "env": "payments-api env=prod",
+            "region": "eu-west-3"
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-19T07:23:27.394002092Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 0 / 3
+Decision: pass (no errors)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "Provided Grok expressions do not match field value: [2026-02-19T14:01:12.431Z INFO  payments-api env=prod region=eu-west-3 trace_id=4f2c9b1b9b3a4e2c user_id=U123 txn_id=T-78421 method=POST path=/payments/authorize status=200 duration_ms=183 msg=\"authorization ok\" channel=web\n\n2026-02-19T14:01:13.044Z ERROR payments-api env=prod region=eu-west-3 trace_id=7a1d3f9c2b8e41a2 user_id=U991 txn_id=T-78422 method=POST path=/payments/authorize status=502 duration_ms=2870 err=\"UpstreamTimeout\" msg=\"gateway timeout after 2.8s\" upstream=risk-service retry=1\n\n2026-02-19T14:01:13.201Z ERROR payments-api env=prod region=eu-west-3 trace_id=a9c0f3c1f0b54b0f user_id=U456 txn_id=T-78423 method=POST path=/payments/authorize status=500 duration_ms=412 err=\"DBDeadlock\" msg=\"deadlock detected\" db=core-ledger]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "Provided Grok expressions do not match field value: [2026-02-19T14:01:12.431Z INFO  payments-api env=prod region=eu-west-3 trace_id=4f2c9b1b9b3a4e2c user_id=U123 txn_id=T-78421 method=POST path=/payments/authorize status=200 duration_ms=183 msg=\"authorization ok\" channel=web\n\n2026-02-19T14:01:13.044Z ERROR payments-api env=prod region=eu-west-3 trace_id=7a1d3f9c2b8e41a2 user_id=U991 txn_id=T-78422 method=POST path=/payments/authorize status=502 duration_ms=2870 err=\"UpstreamTimeout\" msg=\"gateway timeout after 2.8s\" upstream=risk-service retry=1\n\n2026-02-19T14:01:13.201Z ERROR payments-api env=prod region=eu-west-3 trace_id=a9c0f3c1f0b54b0f user_id=U456 txn_id=T-78423 method=POST path=/payments/authorize status=500 duration_ms=412 err=\"DBDeadlock\" msg=\"deadlock detected\" db=core-ledger]"
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: Provided Grok expressions do not match field value: [2026-02-19T14:01:12.431Z INFO  payments-api env=prod region=eu-west-3 trace_id=4f2c9b1b9b3a4e2c user_id=U123 txn_id=T-78421 method=POST path=/payments/authorize status=200 duration_ms=183 msg="authorization ok" channel=web\n\n2026-02-19T14:01:13.044Z ERROR payments-api env=prod region=eu-west-3 trace_id=7a1d3f9c2b8e41a2 user_id=U991 txn_id=T-78422 method=POST path=/payments/authorize status=502 duration_ms=2870 err="UpstreamTimeout" msg="gateway timeout after 2.8s" upstream=risk-service retry=1\n\n2026-02-19T14:01:13.201Z ERROR payments-api env=prod region=eu-west-3 trace_id=a9c0f3c1f0b54b0f user_id=U456 txn_id=T-78423 method=POST path=/payments/authorize status=500 duration_ms=412 err="DBDeadlock" msg="deadlock detected" db=core-ledger]']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "field [message] of type [java.util.ArrayList] cannot be cast to [java.lang.String]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "field [message] of type [java.util.ArrayList] cannot be cast to [java.lang.String]"
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: field [message] of type [java.util.ArrayList] cannot be cast to [java.lang.String]']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 1 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "field [timestamp_str] not present as part of path [timestamp_str]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "field [timestamp_str] not present as part of path [timestamp_str]"
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: field [timestamp_str] not present as part of path [timestamp_str]']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 2 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "field [timestamp_str] not present as part of path [timestamp_str]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "field [timestamp_str] not present as part of path [timestamp_str]"
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: field [timestamp_str] not present as part of path [timestamp_str]']
+
+--- Routing Check ---
+Errors found: 1
+Retry count: 3 / 3
+Decision: pass_with_warnings (errors > 0 but max retries exceeded)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "field [retry_count] not present as part of path [labels.retry_count]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "field [retry_count] not present as part of path [labels.retry_count]"
+      }
+    },
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "field [retry_count] not present as part of path [labels.retry_count]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "field [retry_count] not present as part of path [labels.retry_count]"
+      }
+    },
+    {
+      "error": {
+        "root_cause": [
+          {
+            "type": "illegal_argument_exception",
+            "reason": "field [retry_count] not present as part of path [labels.retry_count]"
+          }
+        ],
+        "type": "illegal_argument_exception",
+        "reason": "field [retry_count] not present as part of path [labels.retry_count]"
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: ['Doc 0: field [retry_count] not present as part of path [labels.retry_count]', 'Doc 1: field [retry_count] not present as part of path [labels.retry_count]', 'Doc 2: field [retry_count] not present as part of path [labels.retry_count]']
+
+--- Routing Check ---
+Errors found: 3
+Retry count: 0 / 3
+Decision: fix (errors > 0 and retries available)
+
+
+--- Simulation Result ---
+{
+  "docs": [
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2026-02-19T14:01:12.431Z",
+          "err": "",
+          "log": {
+            "level": "INFO"
+          },
+          "service": {
+            "name": " payments-api"
+          },
+          "timestamp_str": "2026-02-19T14:01:12.431Z",
+          "http": {
+            "request": {
+              "path": "/payments/authorize",
+              "method": "POST"
+            },
+            "response": {
+              "status_code": 200
+            }
+          },
+          "message": "2026-02-19T14:01:12.431Z INFO  payments-api env=prod region=eu-west-3 trace_id=4f2c9b1b9b3a4e2c user_id=U123 txn_id=T-78421 method=POST path=/payments/authorize status=200 duration_ms=183 msg=\"authorization ok\" channel=web",
+          "event": {
+            "original": "2026-02-19T14:01:12.431Z INFO  payments-api env=prod region=eu-west-3 trace_id=4f2c9b1b9b3a4e2c user_id=U123 txn_id=T-78421 method=POST path=/payments/authorize status=200 duration_ms=183 msg=\\\"authorization ok\\\" channel=web"
+          },
+          "labels": {
+            "duration_ms": 183,
+            "txn_id": "T-78421",
+            "trace_id": "4f2c9b1b9b3a4e2c",
+            "user_id": "U123",
+            "region": "eu-west-3",
+            "env": "prod"
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-19T10:40:28.48021155Z"
+        }
+      }
+    },
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2026-02-19T14:01:13.044Z",
+          "err": "",
+          "log": {
+            "level": "ERROR"
+          },
+          "service": {
+            "name": "payments-api"
+          },
+          "timestamp_str": "2026-02-19T14:01:13.044Z",
+          "http": {
+            "request": {
+              "path": "/payments/authorize",
+              "method": "POST"
+            },
+            "response": {
+              "status_code": 502
+            }
+          },
+          "message": "2026-02-19T14:01:13.044Z ERROR payments-api env=prod region=eu-west-3 trace_id=7a1d3f9c2b8e41a2 user_id=U991 txn_id=T-78422 method=POST path=/payments/authorize status=502 duration_ms=2870 err=\"UpstreamTimeout\" msg=\"gateway timeout after 2.8s\" upstream=risk-service retry=1",
+          "event": {
+            "original": "2026-02-19T14:01:13.044Z ERROR payments-api env=prod region=eu-west-3 trace_id=7a1d3f9c2b8e41a2 user_id=U991 txn_id=T-78422 method=POST path=/payments/authorize status=502 duration_ms=2870 err=\\\"UpstreamTimeout\\\" msg=\\\"gateway timeout after 2.8s\\\" upstream=risk-service retry=1"
+          },
+          "labels": {
+            "duration_ms": 2870,
+            "txn_id": "T-78422",
+            "trace_id": "7a1d3f9c2b8e41a2",
+            "user_id": "U991",
+            "region": "eu-west-3",
+            "env": "prod"
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-19T10:40:28.480237217Z"
+        }
+      }
+    },
+    {
+      "doc": {
+        "_index": "_index",
+        "_id": "_id",
+        "_version": "-3",
+        "_source": {
+          "@timestamp": "2026-02-19T14:01:13.201Z",
+          "err": "",
+          "log": {
+            "level": "ERROR"
+          },
+          "service": {
+            "name": "payments-api"
+          },
+          "timestamp_str": "2026-02-19T14:01:13.201Z",
+          "http": {
+            "request": {
+              "path": "/payments/authorize",
+              "method": "POST"
+            },
+            "response": {
+              "status_code": 500
+            }
+          },
+          "message": "2026-02-19T14:01:13.201Z ERROR payments-api env=prod region=eu-west-3 trace_id=a9c0f3c1f0b54b0f user_id=U456 txn_id=T-78423 method=POST path=/payments/authorize status=500 duration_ms=412 err=\"DBDeadlock\" msg=\"deadlock detected\" db=core-ledger",
+          "event": {
+            "original": "2026-02-19T14:01:13.201Z ERROR payments-api env=prod region=eu-west-3 trace_id=a9c0f3c1f0b54b0f user_id=U456 txn_id=T-78423 method=POST path=/payments/authorize status=500 duration_ms=412 err=\\\"DBDeadlock\\\" msg=\\\"deadlock detected\\\" db=core-ledger"
+          },
+          "labels": {
+            "duration_ms": 412,
+            "txn_id": "T-78423",
+            "trace_id": "a9c0f3c1f0b54b0f",
+            "user_id": "U456",
+            "region": "eu-west-3",
+            "env": "prod"
+          }
+        },
+        "_ingest": {
+          "timestamp": "2026-02-19T10:40:28.480240134Z"
+        }
+      }
+    }
+  ]
+}
+-------------------------
+Extracted Errors: []
+
+--- Routing Check ---
+Errors found: 0
+Retry count: 1 / 3
+Decision: pass (no errors)

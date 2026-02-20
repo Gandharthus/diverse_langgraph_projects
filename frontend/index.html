@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ingest Pipeline Wizard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0b0d13;
+      --surface:  #141720;
+      --surface2: #1c2030;
+      --border:   #262b3d;
+      --text:     #e2e5f0;
+      --dim:      #6b7194;
+      --accent:   #7c6aff;
+      --accent2:  #44d7b6;
+      --green:    #34d399;
+      --orange:   #f59e0b;
+      --red:      #ef4444;
+      --radius:   14px;
+      --font:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono:     'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    header {
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .logo {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 9px;
+      display: grid; place-items: center;
+      font-weight: 800; font-size: 16px; color: #fff;
+    }
+    header h1 { font-size: 16px; font-weight: 600; }
+    .badge {
+      font-size: 10px; font-weight: 700;
+      background: var(--accent);
+      color: #fff;
+      padding: 2px 7px;
+      border-radius: 5px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+
+    /* ── Main ─────────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      width: 100%; max-width: 880px;
+      margin: 0 auto;
+      padding: 28px 20px;
+      display: flex; flex-direction: column; gap: 22px;
+    }
+
+    /* ── Avatar + bubble ──────────────────────────────────────── */
+    .avatar-row { display: flex; align-items: flex-start; gap: 14px; }
+
+    .avatar {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: grid; place-items: center;
+      font-size: 22px;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 3px var(--bg), 0 0 16px rgba(124,106,255,.25);
+      transition: box-shadow .4s;
+    }
+    .avatar.thinking {
+      animation: glow 1.4s ease-in-out infinite;
+    }
+    @keyframes glow {
+      0%,100% { box-shadow: 0 0 0 3px var(--bg), 0 0 16px rgba(124,106,255,.25); }
+      50%     { box-shadow: 0 0 0 3px var(--bg), 0 0 32px rgba(124,106,255,.55); }
+    }
+
+    .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 13px 17px;
+      font-size: 13.5px; line-height: 1.55;
+      max-width: 580px;
+      position: relative;
+    }
+    .bubble::before {
+      content: ''; position: absolute;
+      left: -7px; top: 16px;
+      border: 7px solid transparent;
+      border-right-color: var(--border);
+    }
+    .bubble::after {
+      content: ''; position: absolute;
+      left: -5px; top: 17px;
+      border: 6px solid transparent;
+      border-right-color: var(--surface);
+    }
+
+    /* ── Input card ───────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+    .card label {
+      display: block; font-size: 11px; font-weight: 700;
+      color: var(--dim); text-transform: uppercase;
+      letter-spacing: .5px; margin-bottom: 8px;
+    }
+    textarea {
+      width: 100%; min-height: 130px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px; line-height: 1.6;
+      padding: 12px; resize: vertical;
+      outline: none; transition: border-color .2s;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--dim); opacity: .55; }
+
+    .hint { font-size: 11px; color: var(--dim); margin-top: 6px; }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+    button {
+      border: none; cursor: pointer;
+      font-family: var(--font); font-weight: 600; font-size: 13px;
+      border-radius: 8px; padding: 9px 22px;
+      transition: all .15s;
+    }
+    .btn-go {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+    }
+    .btn-go:hover { opacity: .9; transform: translateY(-1px); }
+    .btn-go:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+    .btn-clear {
+      background: var(--surface2);
+      color: var(--text); border: 1px solid var(--border);
+    }
+    .btn-clear:hover { background: var(--border); }
+
+    /* ── Pipeline node steps ──────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; }
+
+    .step {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 9px 0; position: relative;
+    }
+    /* vertical connector line */
+    .step::before {
+      content: ''; position: absolute;
+      left: 15px; top: 34px; bottom: -9px;
+      width: 2px; background: var(--border);
+    }
+    .step:last-child::before { display: none; }
+
+    .dot {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 13px; flex-shrink: 0;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      transition: all .3s; z-index: 1;
+    }
+    .step.active .dot  { background: var(--accent); border-color: var(--accent); animation: dotPulse .9s infinite; }
+    .step.done   .dot  { background: var(--green);  border-color: var(--green); }
+    .step.warn   .dot  { background: var(--orange); border-color: var(--orange); }
+    .step.error  .dot  { background: var(--red);    border-color: var(--red); }
+    @keyframes dotPulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(124,106,255,.35); }
+      50%     { box-shadow: 0 0 0 7px rgba(124,106,255,0); }
+    }
+
+    .step-body { flex: 1; }
+    .step-name { font-size: 12.5px; font-weight: 600; }
+    .step.pending .step-name { color: var(--dim); }
+    .step-info { font-size: 11px; color: var(--dim); margin-top: 1px; }
+
+    /* ── Output card ──────────────────────────────────────────── */
+    #outputCard {
+      display: none;
+    }
+    #outputCard.show { display: block; }
+    .out-header {
+      padding: 12px 16px;
+      font-size: 11px; font-weight: 700;
+      color: var(--dim); text-transform: uppercase; letter-spacing: .5px;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .copy-btn {
+      font-size: 11px; padding: 3px 10px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--dim); border-radius: 5px;
+      cursor: pointer; font-family: var(--font);
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    pre.code {
+      padding: 14px 16px;
+      font-family: var(--mono);
+      font-size: 11.5px; line-height: 1.6;
+      color: var(--text);
+      overflow: auto; max-height: 420px;
+      white-space: pre;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    footer {
+      padding: 14px; text-align: center;
+      font-size: 11px; color: var(--dim);
+      border-top: 1px solid var(--border);
+    }
+
+    @media (max-width: 600px) {
+      main { padding: 18px 12px; }
+      .bubble { max-width: 100%; }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header>
+  <div class="logo">P</div>
+  <h1>Ingest Pipeline Wizard</h1>
+  <span class="badge">Beta</span>
+</header>
+
+<main>
+
+  <!-- Avatar -->
+  <div class="avatar-row">
+    <div class="avatar" id="avatar">&#129302;</div>
+    <div class="bubble" id="bubble">
+      Hey! Paste your raw log samples below and I'll craft an Elasticsearch ingest pipeline for you. I'll show you every step along the way.
+    </div>
+  </div>
+
+  <!-- Input -->
+  <div class="card">
+    <label>Raw log samples</label>
+    <textarea id="logInput" placeholder="Paste one log line per line, e.g.:&#10;2024-01-15T10:23:45.123Z INFO  [web-server] 192.168.1.100 GET /api/users 200 45ms &quot;Mozilla/5.0&quot;&#10;2024-01-15T10:23:46.456Z ERROR [db-handler] 10.0.0.55 POST /api/orders 500 1200ms &quot;curl/7.88.1&quot;"></textarea>
+    <p class="hint">1 to 5 log lines, same format. One per line.</p>
+    <div class="btn-row">
+      <button class="btn-go" id="btnGo" onclick="startGeneration()">Generate Pipeline</button>
+      <button class="btn-clear" onclick="resetAll()">Clear</button>
+    </div>
+  </div>
+
+  <!-- Steps -->
+  <div class="steps" id="steps"></div>
+
+  <!-- Output -->
+  <div class="card" id="outputCard">
+    <div class="out-header">
+      <span>Generated Pipeline JSON</span>
+      <button class="copy-btn" onclick="copyJSON()">Copy</button>
+    </div>
+    <pre class="code" id="outputCode"></pre>
+  </div>
+
+</main>
+
+<footer>Ingest Pipeline Wizard &mdash; Beta &mdash; Powered by LangGraph + Groq</footer>
+
+<script>
+// ================================================================
+// CONFIG — Set this to your deployed LangGraph Platform endpoint
+// ================================================================
+const API_BASE = window.PIPELINE_API_BASE || '';
+// When deployed, this will be something like:
+//   https://your-deployment.langgraph.app
+// For local dev with langgraph dev, usually:
+//   http://localhost:2024
+
+const ASSISTANT_ID = 'pipeline_wizard';
+
+// ── Node definitions for the step tracker ────────────────────
+const PIPELINE_NODES = [
+  { id: 'validate_sample',          label: 'Validate samples',            icon: '\u{1F50D}' },
+  { id: 'build_generation_context', label: 'Build context',               icon: '\u{1F4DC}' },
+  { id: 'generate_pipeline',        label: 'Generate pipeline (AI)',      icon: '\u{1F916}' },
+  { id: 'check_guardrails',         label: 'Guardrail checks',           icon: '\u{1F6E1}' },
+  { id: 'simulate_pipeline',        label: 'Simulate on Elasticsearch',  icon: '\u26A1'     },
+  { id: 'present_results',          label: 'Present results',            icon: '\u{1F389}' },
+  { id: 'accept_pipeline',          label: 'Pipeline accepted',          icon: '\u2705'     },
+];
+
+const FIX_NODES = new Set([
+  'build_guardrail_fix_context', 'fix_pipeline_guardrails',
+  'build_simulation_fix_context', 'fix_pipeline_simulation',
+]);
+
+const NODE_MESSAGES = {
+  validate_sample:              'Validating your log samples...',
+  build_generation_context:     'Preparing the generation context...',
+  generate_pipeline:            'Generating your ingest pipeline with AI...',
+  check_guardrails:             'Running safety guardrails...',
+  build_guardrail_fix_context:  'Preparing guardrail fix...',
+  fix_pipeline_guardrails:      'AI is fixing guardrail issues...',
+  simulate_pipeline:            'Simulating pipeline against Elasticsearch...',
+  build_simulation_fix_context: 'Preparing simulation fix...',
+  fix_pipeline_simulation:      'AI is fixing simulation errors...',
+  present_results:              'Pipeline ready! Here are the results.',
+  accept_pipeline:              'Pipeline accepted! You can copy the JSON below.',
+};
+
+let lastPipeline = null;
+let visitedNodes = new Set();
+
+// ── Render steps ─────────────────────────────────────────────
+function renderSteps() {
+  const el = document.getElementById('steps');
+  el.innerHTML = PIPELINE_NODES.map(n => `
+    <div class="step pending" id="step-${n.id}">
+      <div class="dot">${n.icon}</div>
+      <div class="step-body">
+        <div class="step-name">${n.label}</div>
+        <div class="step-info" id="info-${n.id}"></div>
+      </div>
+    </div>`).join('');
+}
+
+function setStep(id, state, info) {
+  const el = document.getElementById('step-' + id);
+  if (el) el.className = 'step ' + state;
+  if (info) {
+    const infoEl = document.getElementById('info-' + id);
+    if (infoEl) infoEl.textContent = info;
+  }
+}
+
+function say(text) { document.getElementById('bubble').textContent = text; }
+
+function thinking(on) {
+  document.getElementById('avatar').classList.toggle('thinking', on);
+}
+
+// ── Start generation ─────────────────────────────────────────
+async function startGeneration() {
+  const raw = document.getElementById('logInput').value.trim();
+  if (!raw) { say("Please paste at least one log sample!"); return; }
+  const samples = raw.split('\n').filter(l => l.trim());
+  if (!samples.length) { say("No valid lines found. Try again."); return; }
+
+  // Reset
+  renderSteps();
+  document.getElementById('outputCard').classList.remove('show');
+  lastPipeline = null;
+  visitedNodes = new Set();
+
+  const btn = document.getElementById('btnGo');
+  btn.disabled = true; btn.textContent = 'Generating...';
+  thinking(true);
+  say(`Processing ${samples.length} sample(s)... let's go!`);
+
+  try {
+    await runPipeline(samples);
+  } catch (err) {
+    say('Oops! ' + err.message);
+    console.error(err);
+  }
+
+  btn.disabled = false; btn.textContent = 'Generate Pipeline';
+  thinking(false);
+}
+
+// ── Call LangGraph Platform API ──────────────────────────────
+async function runPipeline(samples) {
+  // 1. Create a thread
+  const threadRes = await fetch(`${API_BASE}/threads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!threadRes.ok) throw new Error('Failed to create thread: ' + threadRes.status);
+  const thread = await threadRes.json();
+  const threadId = thread.thread_id;
+
+  // 2. Stream a run
+  const runRes = await fetch(`${API_BASE}/threads/${threadId}/runs/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      assistant_id: ASSISTANT_ID,
+      input: {
+        raw_log_samples: samples,
+        user_decision: 'accept',
+      },
+      stream_mode: ['updates'],
+    }),
+  });
+  if (!runRes.ok) throw new Error('Failed to start run: ' + runRes.status);
+
+  // 3. Read SSE stream
+  const reader = runRes.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE frames
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop(); // keep incomplete frame
+
+    for (const part of parts) {
+      const lines = part.split('\n');
+      let eventType = '';
+      let dataStr = '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+        else if (line.startsWith('data: ')) dataStr += line.slice(6);
+      }
+      if (!dataStr) continue;
+
+      try {
+        const data = JSON.parse(dataStr);
+        handleStreamEvent(eventType, data);
+      } catch (e) {
+        // not JSON, skip
+      }
+    }
+  }
+
+  // Finalize
+  finalize();
+}
+
+// ── Handle each streamed event ───────────────────────────────
+function handleStreamEvent(eventType, data) {
+  // LangGraph Platform streams "updates" events with shape:
+  //   { node_name: { ...state_patch } }
+  // or metadata events we can skip
+
+  if (eventType === 'updates' || eventType === 'data') {
+    // data is the state update dict  { "node_name": { ... } }
+    for (const [nodeName, patch] of Object.entries(data)) {
+      if (nodeName === '__metadata__' || nodeName === '__end__') continue;
+      processNode(nodeName, patch);
+    }
+  }
+
+  // Also handle if data itself has a node key (varies by LangGraph version)
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    for (const key of Object.keys(data)) {
+      if (PIPELINE_NODES.some(n => n.id === key) || FIX_NODES.has(key)) {
+        if (!visitedNodes.has(key)) {
+          processNode(key, data[key]);
+        }
+      }
+    }
+  }
+}
+
+function processNode(nodeName, patch) {
+  // Mark previous active nodes as done
+  visitedNodes.forEach(prev => {
+    if (!FIX_NODES.has(prev)) setStep(prev, 'done');
+  });
+  visitedNodes.add(nodeName);
+
+  const msg = NODE_MESSAGES[nodeName] || `Processing: ${nodeName}`;
+
+  // Fix nodes → show as warning on parent step
+  if (FIX_NODES.has(nodeName)) {
+    if (nodeName.includes('guardrail')) {
+      setStep('check_guardrails', 'warn', 'Fixing guardrail issues (retry)...');
+    } else {
+      setStep('simulate_pipeline', 'warn', 'Fixing simulation errors (retry)...');
+    }
+    say(msg);
+    return;
+  }
+
+  // Normal node
+  setStep(nodeName, 'active');
+  say(msg);
+
+  if (!patch || typeof patch !== 'object') return;
+
+  // Attach error details
+  if (patch.guardrail_errors && patch.guardrail_errors.length) {
+    setStep(nodeName, 'warn', `${patch.guardrail_errors.length} issue(s) found`);
+  }
+  if (patch.simulation_errors && patch.simulation_errors.length) {
+    setStep(nodeName, 'warn', `${patch.simulation_errors.length} error(s) to fix`);
+  }
+  if (patch.error) {
+    setStep(nodeName, 'error', patch.error);
+    say('Problem: ' + patch.error);
+  }
+
+  // Track pipeline
+  if (patch.pipeline_json) lastPipeline = patch.pipeline_json;
+}
+
+function finalize() {
+  // Mark all remaining active as done
+  visitedNodes.forEach(n => {
+    if (!FIX_NODES.has(n)) setStep(n, 'done');
+  });
+
+  if (lastPipeline) {
+    say("All done! Your pipeline is ready. Copy the JSON below and use it in Elasticsearch.");
+    document.getElementById('outputCode').textContent = JSON.stringify(lastPipeline, null, 2);
+    const card = document.getElementById('outputCard');
+    card.classList.add('show');
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    say("Pipeline generation finished. Check the steps above for details.");
+  }
+  thinking(false);
+}
+
+// ── Utilities ────────────────────────────────────────────────
+function copyJSON() {
+  const text = document.getElementById('outputCode').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+function resetAll() {
+  document.getElementById('logInput').value = '';
+  document.getElementById('steps').innerHTML = '';
+  document.getElementById('outputCard').classList.remove('show');
+  document.getElementById('outputCode').textContent = '';
+  lastPipeline = null;
+  visitedNodes = new Set();
+  thinking(false);
+  say("Hey! Paste your raw log samples below and I'll craft an Elasticsearch ingest pipeline for you. I'll show you every step along the way.");
+}
+
+// Init
+renderSteps();
+</script>
+
+</body>
+</html>

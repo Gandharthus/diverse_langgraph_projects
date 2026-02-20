@@ -321,12 +321,14 @@ async def generate_pipeline_node(
 async def check_guardrails_node(state: WizardState) -> WizardState:
     """Run deterministic guardrail checks (delegates to validators.py)."""
     logger.info("Node: check_guardrails")
+    sample_messages = [s for s in state.get("raw_log_samples", []) if isinstance(s, str)]
     result: GuardrailResult = check_guardrails(
         state.get("pipeline_json"),
         forbidden_processors=FORBIDDEN_PROCESSORS,
         processor_phases=PROCESSOR_PHASES,
         ecs_namespaces=ECS_NAMESPACES,
         ecs_field_catalog=ECS_FIELD_CATALOG,
+        samples=sample_messages,
     )
     return {
         **state,

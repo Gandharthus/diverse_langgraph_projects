@@ -208,3 +208,21 @@ ecs_field_catalog:
   related.user:                  { type: keyword }
   related.hash:                  { type: keyword }
   related.hosts:                 { type: keyword }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Search Agent – Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# Settings for the Elasticsearch log search agent.
+
+search_agent:
+  # How many times the agent retries fixing a query that fails validation
+  max_query_fix_retries: 3
+
+  # Maximum aggregation nesting depth (company policy: never exceed 3)
+  max_agg_depth: 3
+
+  # Maximum number of buckets per terms/histogram aggregation
+  max_buckets: 1000
+
+  # How many candidate indices the resolve_index tool should return
+  top_k_indices: 5
