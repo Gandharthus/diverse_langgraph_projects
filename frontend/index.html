@@ -286,14 +286,9 @@
 <footer>Ingest Pipeline Wizard &mdash; Beta &mdash; Powered by LangGraph + Groq</footer>
 
 <script>
-// ================================================================
-// CONFIG — Set this to your deployed LangGraph Platform endpoint
-// ================================================================
-const API_BASE = window.PIPELINE_API_BASE || '';
-// When deployed, this will be something like:
-//   https://your-deployment.langgraph.app
-// For local dev with langgraph dev, usually:
-//   http://localhost:2024
+// We are now using a local proxy, so API_BASE is relative root
+const API_BASE = '';
+const API_KEY = ''; // Managed by the backend proxy
 
 const ASSISTANT_ID = 'pipeline_wizard';
 
@@ -390,9 +385,12 @@ async function startGeneration() {
 // ── Call LangGraph Platform API ──────────────────────────────
 async function runPipeline(samples) {
   // 1. Create a thread
+  const headers = { 'Content-Type': 'application/json' };
+  if (API_KEY) headers['X-Api-Key'] = API_KEY;
+
   const threadRes = await fetch(`${API_BASE}/threads`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({}),
   });
   if (!threadRes.ok) throw new Error('Failed to create thread: ' + threadRes.status);
@@ -402,7 +400,7 @@ async function runPipeline(samples) {
   // 2. Stream a run
   const runRes = await fetch(`${API_BASE}/threads/${threadId}/runs/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       assistant_id: ASSISTANT_ID,
       input: {
@@ -423,6 +421,7 @@ async function runPipeline(samples) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
+    buffer = buffer.replace(/\r\n|\r/g, '\n');
 
     // Parse SSE frames
     const parts = buffer.split('\n\n');
