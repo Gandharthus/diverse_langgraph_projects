@@ -285,3 +285,29 @@ illumio_blocked_agent:
 
   # Maximum number of buckets returned per aggregation
   agg_size: 20
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Illumio Service Consumers Agent – Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# Settings for the Illumio service-consumers analysis agent.
+# Answers: "Quelles sont toutes les applications qui consomment mon service ?"
+
+illumio_consumers_agent:
+  # Elasticsearch index pattern for Illumio flow logs
+  illumio_index_pattern: "your-index-*"
+
+  # App label fields
+  source_app_field: "illumio.source.labels.app"
+  dest_app_field:   "illumio.destination.labels.app"
+
+  # Policy decision field and allowed value
+  # Note: uses top-level "policy_decision" (not prefixed with "illumio.")
+  policy_decision_field: "policy_decision"
+  allowed_value: "Allowed"
+
+  # App prefix template ({app_code} is replaced by e.g. AP12345)
+  app_prefix_format: "A_{app_code}-"
+
+  # Maximum number of consumer application buckets returned by the aggregation
+  agg_size: 20
