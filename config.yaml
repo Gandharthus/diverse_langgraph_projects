@@ -252,3 +252,36 @@ illumio_agent:
 
   # Maximum number of source-application buckets returned by the aggregation
   agg_size: 50
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Illumio Blocked Flows Agent – Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# Settings for the Illumio blocked-flows analysis agent.
+# Answers: "Est-ce qu'il y a eu des flux bloqués vers ou depuis mon application/serveur ?"
+
+illumio_blocked_agent:
+  # Elasticsearch index pattern for Illumio flow logs
+  illumio_index_pattern: "your-index-*"
+
+  # Field that carries the Illumio policy decision and its denied value
+  policy_decision_field: "illumio.policy_decision"
+  denied_value: "denied"
+
+  # Hostname fields (used when target_type = "hostname")
+  source_hostname_field: "illumio.source.hostname"
+  dest_hostname_field:   "illumio.destination.hostname"
+
+  # App label fields (used when target_type = "app")
+  source_app_field: "illumio.source.labels.app"
+  dest_app_field:   "illumio.destination.labels.app"
+
+  # App prefix template ({app_code} is replaced by e.g. AP12345)
+  app_prefix_format: "A_{app_code}-"
+
+  # Network fields used in aggregations
+  dest_port_field:  "destination.port"
+  protocol_field:   "network.protocol"
+
+  # Maximum number of buckets returned per aggregation
+  agg_size: 20

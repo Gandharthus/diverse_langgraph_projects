@@ -3,7 +3,8 @@
   "graphs": {
     "pipeline_wizard": "./graph.py:graph",
     "search_agent": "./search_graph.py:graph",
-    "illumio_agent": "./illumio_graph.py:graph"
+    "illumio_agent": "./illumio_graph.py:graph",
+    "illumio_blocked_agent": "./illumio_blocked_graph.py:graph"
   },
   "env": ".env",
   "python_version": "3.11",
