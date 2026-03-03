@@ -226,3 +226,29 @@ search_agent:
 
   # How many candidate indices the resolve_index tool should return
   top_k_indices: 5
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Illumio Agent – Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# Settings for the Illumio cross-environment traffic analysis agent.
+
+illumio_agent:
+  # Elasticsearch index pattern for Illumio flow logs
+  illumio_index_pattern: "your-index-*"
+
+  # Elasticsearch field paths for Illumio workload labels
+  source_env_field:  "illumio.source.labels.env"
+  dest_env_field:    "illumio.destination.labels.env"
+  source_app_field:  "illumio.source.labels.app"
+  dest_app_field:    "illumio.destination.labels.app"
+
+  # Environment label values used in the term filters
+  dev_env_value:  "E_DEV"
+  prod_env_value: "E_PROD"
+
+  # Destination app prefix template  ({app_code} is replaced by e.g. AP12345)
+  app_prefix_format: "A_{app_code}-"
+
+  # Maximum number of source-application buckets returned by the aggregation
+  agg_size: 50

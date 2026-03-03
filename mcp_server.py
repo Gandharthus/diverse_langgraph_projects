@@ -109,5 +109,35 @@ async def resolve_index(pattern: str, top_k: int = 5) -> dict | list[dict]:
             return {"error": str(e)}
 
 
+@mcp.tool()
+async def search(index: str, body: dict) -> dict:
+    """
+    Execute an Elasticsearch search query.
+
+    Args:
+        index: Index name or wildcard pattern (e.g. "logs-*", "your-index-*").
+        body:  Elasticsearch DSL query body (query, aggs, size, etc.).
+    """
+    url = f"{ES_URL}/{index}/_search"
+
+    async with httpx.AsyncClient(verify=VERIFY_SSL) as client:
+        try:
+            response = await client.post(
+                url,
+                json=body,
+                auth=ES_AUTH,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            try:
+                return e.response.json()
+            except Exception:
+                return {"error": str(e)}
+        except Exception as e:
+            return {"error": str(e)}
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
