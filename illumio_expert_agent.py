@@ -78,6 +78,12 @@ class IllumioExpertState(TypedDict, total=False):
     # Error from classification (non-fatal – falls back to "general")
     error: Optional[str]
 
+    # Persistent entities extracted from the conversation.
+    # Once set, these are retained across turns so sub-agents always have
+    # enough context even when the user omits them in follow-up messages.
+    ap_code:  Optional[str]   # e.g. "AP12345"
+    hostname: Optional[str]   # e.g. "srv-prod-db01"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -135,6 +141,23 @@ def _format_conversation_context(messages: list[BaseMessage], max_turns: int = 6
         content = msg.content if isinstance(msg.content, str) else str(msg.content)
         lines.append(f"{role}: {content}")
     return "\n".join(lines)
+
+
+def _enrich_request(user_request: str, ap_code: str | None, hostname: str | None) -> str:
+    """Prepend known context entities so sub-agents don't need to re-extract them.
+
+    This lets the user say "and what about the blocked flows?" in a follow-up
+    without repeating the AP code or hostname — the expert agent remembers them.
+    """
+    extras: list[str] = []
+    if ap_code:
+        extras.append(f"AP code: {ap_code}")
+    if hostname:
+        extras.append(f"Hostname: {hostname}")
+    if extras:
+        context_line = "[Known context — " + ", ".join(extras) + "]"
+        return f"{context_line}\n\n{user_request}"
+    return user_request
 
 
 _INTENT_DESCRIPTIONS: dict[str, str] = {
@@ -222,8 +245,21 @@ async def classify_intent_node(
         if raw in ("traffic", "blocked", "consumers", "general"):
             intent = raw
 
-    logger.info("Classified intent: %s", intent)
-    return {**state, "intent": intent, "error": None}
+    # Extract entities – only overwrite existing state values when the LLM
+    # found something new in the current message (non-null, non-empty string).
+    ap_code  = state.get("ap_code")
+    hostname = state.get("hostname")
+
+    if result:
+        new_ap  = result.get("ap_code")
+        new_host = result.get("hostname")
+        if isinstance(new_ap, str) and new_ap.strip():
+            ap_code = new_ap.strip()
+        if isinstance(new_host, str) and new_host.strip():
+            hostname = new_host.strip()
+
+    logger.info("Classified intent: %s | ap_code=%s | hostname=%s", intent, ap_code, hostname)
+    return {**state, "intent": intent, "error": None, "ap_code": ap_code, "hostname": hostname}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,8 +276,9 @@ async def invoke_traffic_agent_node(
     messages = state.get("messages", [])
     user_request = _last_human_message(messages)
     context = _format_conversation_context(messages)
+    enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
 
-    result = await traffic_agent.run(user_request)
+    result = await traffic_agent.run(enriched)
 
     if result.mode == "answered" and result.answer:
         answer = result.answer
@@ -269,8 +306,9 @@ async def invoke_blocked_agent_node(
     messages = state.get("messages", [])
     user_request = _last_human_message(messages)
     context = _format_conversation_context(messages)
+    enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
 
-    result = await blocked_agent.run(user_request)
+    result = await blocked_agent.run(enriched)
 
     if result.mode == "answered" and result.answer:
         answer = result.answer
@@ -298,8 +336,9 @@ async def invoke_consumers_agent_node(
     messages = state.get("messages", [])
     user_request = _last_human_message(messages)
     context = _format_conversation_context(messages)
+    enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
 
-    result = await consumers_agent.run(user_request)
+    result = await consumers_agent.run(enriched)
 
     if result.mode == "answered" and result.answer:
         answer = result.answer
@@ -462,10 +501,12 @@ class IllumioExpertAgent:
     async def chat(self, user_message: str) -> str:
         """Single-turn: process one message and return the answer string."""
         initial: IllumioExpertState = {
-            "messages":       [HumanMessage(content=user_message)],
-            "intent":         None,
+            "messages":        [HumanMessage(content=user_message)],
+            "intent":          None,
             "subagent_answer": None,
-            "error":          None,
+            "error":           None,
+            "ap_code":         None,
+            "hostname":        None,
         }
         final = await self.graph.ainvoke(initial)
         for msg in reversed(final.get("messages", [])):
@@ -477,16 +518,23 @@ class IllumioExpertAgent:
         self,
         user_message: str,
         history: list[BaseMessage],
-    ) -> tuple[list[BaseMessage], str]:
+        ap_code:  str | None = None,
+        hostname: str | None = None,
+    ) -> tuple[list[BaseMessage], str, str | None, str | None]:
         """Multi-turn: process one message with existing history.
 
-        Returns the updated message list and the agent's answer string.
+        Accepts and returns ``ap_code`` / ``hostname`` so callers can persist
+        them across turns without re-parsing the message themselves.
+
+        Returns ``(updated_messages, answer, ap_code, hostname)``.
         """
         initial: IllumioExpertState = {
-            "messages":       [*history, HumanMessage(content=user_message)],
-            "intent":         None,
+            "messages":        [*history, HumanMessage(content=user_message)],
+            "intent":          None,
             "subagent_answer": None,
-            "error":          None,
+            "error":           None,
+            "ap_code":         ap_code,
+            "hostname":        hostname,
         }
         final = await self.graph.ainvoke(initial)
         final_messages = final.get("messages", initial["messages"])
@@ -497,4 +545,9 @@ class IllumioExpertAgent:
                 answer = msg.content
                 break
 
-        return final_messages, answer
+        return (
+            final_messages,
+            answer,
+            final.get("ap_code"),
+            final.get("hostname"),
+        )
