@@ -46,6 +46,7 @@ from illumio_expert_prompts import (
     ILLUMIO_EXPERT_LANGUAGE_ADAPT_PROMPT,
     ILLUMIO_EXPERT_NATURAL_RESPONSE_PROMPT,
     ILLUMIO_EXPERT_SYSTEM_PROMPT,
+    ILLUMIO_EXPERT_TRANSPARENT_RESPONSE_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,47 @@ async def _adapt_language(
     return response.content
 
 
+async def _format_subagent_response(
+    chatmodel: ChatOpenAI,
+    conversation_context: str,
+    subagent_action: str,
+    mode: str,
+    answer: str | None,
+    errors: list[str],
+    kibana_payload: str | None,
+) -> str:
+    """Produce a transparent 3-paragraph response after any subagent invocation.
+
+    Paragraph 1: what the subagent did (action + parameters + data source).
+    Paragraph 2: the results (findings, fallback query, or missing-info request).
+    Paragraph 3: suggested next steps / follow-up actions.
+
+    This replaces both ``_adapt_language`` (for the "answered" mode) and the
+    ``_naturalize_fallback`` calls in the subagent invoke nodes, so the format
+    is consistent regardless of the outcome.
+    """
+    if mode == "answered" and answer:
+        subagent_result = answer
+    elif mode == "kibana_fallback" and kibana_payload:
+        subagent_result = (
+            "Elasticsearch is currently unavailable. "
+            "A Kibana Dev Tools query has been prepared as a workaround:\n\n"
+            f"```\n{kibana_payload}\n```"
+        )
+    else:
+        error_str = "; ".join(errors) if errors else "Unknown error."
+        subagent_result = f"The query could not be completed. Reason: {error_str}"
+
+    prompt = ILLUMIO_EXPERT_TRANSPARENT_RESPONSE_PROMPT.format(
+        subagent_action=subagent_action,
+        mode=mode,
+        subagent_result=subagent_result,
+        conversation_context=conversation_context,
+    )
+    response: AIMessage = await chatmodel.ainvoke([SystemMessage(content=prompt)])
+    return response.content
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Node: Classify intent
 # ─────────────────────────────────────────────────────────────────────────────
@@ -295,19 +337,26 @@ async def invoke_traffic_agent_node(
 
     result = await traffic_agent.run(enriched)
 
-    if result.mode == "answered" and result.answer:
-        answer = await _adapt_language(chatmodel, context, result.answer)
-    elif result.mode == "kibana_fallback" and result.kibana_payload:
-        answer = await _naturalize_fallback(
-            chatmodel, context, "traffic", "kibana_fallback",
-            result.errors, result.kibana_payload,
-        )
-    else:
-        answer = await _naturalize_fallback(
-            chatmodel, context, "traffic", "failed",
-            result.errors, None,
-        )
+    dir_labels = {
+        "dev_to_prod": "development → production",
+        "prod_to_dev": "production → development",
+        "prod_to_prod": "production → production",
+    }
+    action_parts = ["Queried Elasticsearch for cross-environment traffic flows"]
+    if result.app_code:
+        action_parts.append(f"for application {result.app_code}")
+    if result.direction:
+        action_parts.append(f"in direction {dir_labels.get(result.direction, result.direction)}")
+    if result.date_range:
+        action_parts.append(f"over time range {result.date_range}")
+    if result.index:
+        action_parts.append(f"on index {result.index}")
+    subagent_action = " ".join(action_parts) + "."
 
+    answer = await _format_subagent_response(
+        chatmodel, context, subagent_action,
+        result.mode, result.answer, result.errors, result.kibana_payload,
+    )
     return {**state, "subagent_answer": answer}
 
 
@@ -325,19 +374,22 @@ async def invoke_blocked_agent_node(
 
     result = await blocked_agent.run(enriched)
 
-    if result.mode == "answered" and result.answer:
-        answer = await _adapt_language(chatmodel, context, result.answer)
-    elif result.mode == "kibana_fallback" and result.kibana_payload:
-        answer = await _naturalize_fallback(
-            chatmodel, context, "blocked", "kibana_fallback",
-            result.errors, result.kibana_payload,
-        )
-    else:
-        answer = await _naturalize_fallback(
-            chatmodel, context, "blocked", "failed",
-            result.errors, None,
-        )
+    target_label = result.target or "unknown target"
+    if result.target_type:
+        target_label = f"{result.target_type} {target_label}"
+    action_parts = [f"Queried Elasticsearch for blocked/denied flows targeting {target_label}"]
+    if result.direction:
+        action_parts.append(f"({result.direction} flows)")
+    if result.date_range:
+        action_parts.append(f"over time range {result.date_range}")
+    if result.index:
+        action_parts.append(f"on index {result.index}")
+    subagent_action = " ".join(action_parts) + "."
 
+    answer = await _format_subagent_response(
+        chatmodel, context, subagent_action,
+        result.mode, result.answer, result.errors, result.kibana_payload,
+    )
     return {**state, "subagent_answer": answer}
 
 
@@ -355,19 +407,19 @@ async def invoke_consumers_agent_node(
 
     result = await consumers_agent.run(enriched)
 
-    if result.mode == "answered" and result.answer:
-        answer = await _adapt_language(chatmodel, context, result.answer)
-    elif result.mode == "kibana_fallback" and result.kibana_payload:
-        answer = await _naturalize_fallback(
-            chatmodel, context, "consumers", "kibana_fallback",
-            result.errors, result.kibana_payload,
-        )
-    else:
-        answer = await _naturalize_fallback(
-            chatmodel, context, "consumers", "failed",
-            result.errors, None,
-        )
+    action_parts = ["Queried Elasticsearch to discover service consumers"]
+    if result.app_code:
+        action_parts.append(f"for application {result.app_code}")
+    if result.date_range:
+        action_parts.append(f"over time range {result.date_range}")
+    if result.index:
+        action_parts.append(f"on index {result.index}")
+    subagent_action = " ".join(action_parts) + "."
 
+    answer = await _format_subagent_response(
+        chatmodel, context, subagent_action,
+        result.mode, result.answer, result.errors, result.kibana_payload,
+    )
     return {**state, "subagent_answer": answer}
 
 
