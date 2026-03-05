@@ -94,7 +94,8 @@ class IllumioTrafficState(TypedDict, total=False):
 
     # Intent
     app_code:     Optional[str]   # e.g. "AP12345"
-    direction:    Optional[str]   # "dev_to_prod" | "prod_to_dev"
+    direction:    Optional[str]   # "dev_to_prod" | "prod_to_dev" | "prod_to_prod"
+    date_range:   Optional[str]   # ES relative date-math, e.g. "now-1h", "now-7d" (None = no filter)
     intent_error: Optional[str]
 
     # Query
@@ -169,24 +170,31 @@ def _parse_mcp_result(result: Any) -> Any:
     return result
 
 
-def _build_traffic_query(app_code: str, direction: str, cfg: dict) -> dict:
+def _build_traffic_query(
+    app_code: str, direction: str, cfg: dict, date_range: str | None = None
+) -> dict:
     """
     Deterministically build the Illumio cross-environment traffic DSL query.
 
     dev_to_prod  → source.env = E_DEV,  dest.env = E_PROD
     prod_to_dev  → source.env = E_PROD, dest.env = E_DEV
+    prod_to_prod → source.env = E_PROD, dest.env = E_PROD
 
     The destination app prefix filter always targets the *user's* application
     (e.g. "A_AP12345-"), and the aggregation surfaces the *source* applications
     that are sending traffic across the environment boundary.
+
+    When date_range is provided (e.g. "now-1h", "now-7d") a range filter on
+    @timestamp is added to restrict results to that time window.
     """
     dev_env  = cfg.get("dev_env_value",   "E_DEV")
     prod_env = cfg.get("prod_env_value",  "E_PROD")
 
-    src_env_field = cfg.get("source_env_field", "illumio.source.labels.env")
-    dst_env_field = cfg.get("dest_env_field",   "illumio.destination.labels.env")
-    dst_app_field = cfg.get("dest_app_field",   "illumio.destination.labels.app")
-    src_app_field = cfg.get("source_app_field", "illumio.source.labels.app")
+    src_env_field  = cfg.get("source_env_field",  "illumio.source.labels.env")
+    dst_env_field  = cfg.get("dest_env_field",    "illumio.destination.labels.env")
+    dst_app_field  = cfg.get("dest_app_field",    "illumio.destination.labels.app")
+    src_app_field  = cfg.get("source_app_field",  "illumio.source.labels.app")
+    timestamp_field = cfg.get("timestamp_field",  "@timestamp")
 
     agg_size   = cfg.get("agg_size", 50)
     prefix_tpl = cfg.get("app_prefix_format", "A_{app_code}-")
@@ -194,20 +202,22 @@ def _build_traffic_query(app_code: str, direction: str, cfg: dict) -> dict:
 
     if direction == "prod_to_dev":
         src_env, dst_env = prod_env, dev_env
+    elif direction == "prod_to_prod":
+        src_env, dst_env = prod_env, prod_env
     else:  # default: dev_to_prod
         src_env, dst_env = dev_env, prod_env
 
+    filters: list[dict] = [
+        {"term":   {src_env_field: src_env}},
+        {"term":   {dst_env_field: dst_env}},
+        {"prefix": {dst_app_field: app_prefix}},
+    ]
+    if date_range:
+        filters.append({"range": {timestamp_field: {"gte": date_range, "lte": "now"}}})
+
     return {
         "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"term":   {src_env_field: src_env}},
-                    {"term":   {dst_env_field: dst_env}},
-                    {"prefix": {dst_app_field: app_prefix}},
-                ]
-            }
-        },
+        "query": {"bool": {"filter": filters}},
         "aggs": {
             "apps": {
                 "terms": {
@@ -219,7 +229,9 @@ def _build_traffic_query(app_code: str, direction: str, cfg: dict) -> dict:
     }
 
 
-def _format_answer(search_result: dict, app_code: str, direction: str) -> str:
+def _format_answer(
+    search_result: dict, app_code: str, direction: str, date_range: str | None = None
+) -> str:
     """Produce the human-readable French answer from an Elasticsearch response."""
     hits      = search_result.get("hits", {})
     total     = hits.get("total", {})
@@ -228,21 +240,27 @@ def _format_answer(search_result: dict, app_code: str, direction: str) -> str:
     if direction == "dev_to_prod":
         dir_label = "l'environnement de développement vers l'environnement de production"
         src_label = "développement"
+    elif direction == "prod_to_prod":
+        dir_label = "l'environnement de production vers l'environnement de production"
+        src_label = "production (sources)"
     else:
         dir_label = "l'environnement de production vers l'environnement de développement"
         src_label = "production"
 
+    period_label = f" (période : {date_range} → now)" if date_range else ""
+
     if total_val == 0:
         return (
             f"Non, aucun flux de trafic n'a été détecté circulant de "
-            f"{dir_label} pour l'application {app_code}."
+            f"{dir_label} pour l'application {app_code}{period_label}."
         )
 
     aggs    = search_result.get("aggregations", {})
     buckets = aggs.get("apps", {}).get("buckets", [])
 
     lines = [
-        f"Oui, du trafic a été détecté entre {dir_label} pour l'application {app_code}.",
+        f"Oui, du trafic a été détecté entre {dir_label} pour l'application "
+        f"{app_code}{period_label}.",
         "",
         f"Nombre total de flux détectés : {total_val}",
         "",
@@ -292,16 +310,18 @@ async def parse_intent_node(
             **state,
             "app_code":     None,
             "direction":    None,
+            "date_range":   None,
             "intent_error": "Impossible d'analyser l'intention depuis la réponse du modèle.",
             "stage": IllumioStage.FAILED,
             "error": "Intent parsing failed – LLM returned non-JSON output.",
         }
 
-    app_code  = intent.get("app_code")
-    direction = intent.get("direction", "dev_to_prod")
+    app_code   = intent.get("app_code")
+    direction  = intent.get("direction", "dev_to_prod")
+    date_range = intent.get("date_range")  # None means no time filter
 
     # Guard against unexpected direction values
-    if direction not in ("dev_to_prod", "prod_to_dev"):
+    if direction not in ("dev_to_prod", "prod_to_dev", "prod_to_prod"):
         direction = "dev_to_prod"
 
     if not app_code:
@@ -313,6 +333,7 @@ async def parse_intent_node(
             **state,
             "app_code":     None,
             "direction":    direction,
+            "date_range":   date_range,
             "intent_error": msg,
             "stage": IllumioStage.FAILED,
             "error": None,
@@ -322,6 +343,7 @@ async def parse_intent_node(
         **state,
         "app_code":     app_code,
         "direction":    direction,
+        "date_range":   date_range,
         "intent_error": None,
         "stage": IllumioStage.INTENT_PARSED,
     }
@@ -338,9 +360,10 @@ async def build_query_node(
     logger.info("Node: build_query")
     app_code      = state.get("app_code", "")
     direction     = state.get("direction", "dev_to_prod")
+    date_range    = state.get("date_range")
     index_pattern = cfg.get("illumio_index_pattern", "your-index-*")
 
-    query = _build_traffic_query(app_code, direction, cfg)
+    query = _build_traffic_query(app_code, direction, cfg, date_range)
 
     return {
         **state,
@@ -428,6 +451,7 @@ async def format_answer_node(state: IllumioTrafficState) -> IllumioTrafficState:
         search_result=state.get("search_result", {}),
         app_code=state.get("app_code", ""),
         direction=state.get("direction", "dev_to_prod"),
+        date_range=state.get("date_range"),
     )
     return {
         **state,
@@ -540,6 +564,7 @@ class IllumioTrafficResult:
 
     app_code:       str | None
     direction:      str | None
+    date_range:     str | None
     query:          dict | None
     index:          str | None
     search_result:  dict | None
@@ -570,6 +595,7 @@ class IllumioTrafficResult:
         return cls(
             app_code=state.get("app_code"),
             direction=state.get("direction"),
+            date_range=state.get("date_range"),
             query=state.get("query_json"),
             index=state.get("index_pattern"),
             search_result=state.get("search_result"),
@@ -583,11 +609,12 @@ class IllumioTrafficResult:
     def summary(self) -> str:
         lines = [
             "Illumio Traffic Agent Result",
-            f"  Mode:      {self.mode}",
-            f"  Stage:     {self.stage.value}",
-            f"  App code:  {self.app_code or '(none)'}",
-            f"  Direction: {self.direction or '(none)'}",
-            f"  Index:     {self.index or '(none)'}",
+            f"  Mode:       {self.mode}",
+            f"  Stage:      {self.stage.value}",
+            f"  App code:   {self.app_code or '(none)'}",
+            f"  Direction:  {self.direction or '(none)'}",
+            f"  Date range: {self.date_range or '(all time)'}",
+            f"  Index:      {self.index or '(none)'}",
         ]
 
         if self.mode == "answered" and self.answer:
@@ -644,6 +671,7 @@ class IllumioTrafficAgent:
             "user_request":    request,
             "app_code":        None,
             "direction":       None,
+            "date_range":      None,
             "intent_error":    None,
             "query_json":      None,
             "index_pattern":   None,
