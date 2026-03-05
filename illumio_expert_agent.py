@@ -43,6 +43,7 @@ from illumio_blocked_agent import IllumioBlockedAgent
 from illumio_consumers_agent import IllumioConsumersAgent
 from illumio_expert_prompts import (
     ILLUMIO_EXPERT_INTENT_SYSTEM_PROMPT,
+    ILLUMIO_EXPERT_LANGUAGE_ADAPT_PROMPT,
     ILLUMIO_EXPERT_NATURAL_RESPONSE_PROMPT,
     ILLUMIO_EXPERT_SYSTEM_PROMPT,
 )
@@ -210,6 +211,20 @@ async def _naturalize_fallback(
     return response.content
 
 
+async def _adapt_language(
+    chatmodel: ChatOpenAI,
+    conversation_context: str,
+    subagent_answer: str,
+) -> str:
+    """Rewrite a sub-agent answer in the user's language (detected from conversation)."""
+    prompt = ILLUMIO_EXPERT_LANGUAGE_ADAPT_PROMPT.format(
+        subagent_answer=subagent_answer,
+        conversation_context=conversation_context,
+    )
+    response: AIMessage = await chatmodel.ainvoke([SystemMessage(content=prompt)])
+    return response.content
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Node: Classify intent
 # ─────────────────────────────────────────────────────────────────────────────
@@ -281,7 +296,7 @@ async def invoke_traffic_agent_node(
     result = await traffic_agent.run(enriched)
 
     if result.mode == "answered" and result.answer:
-        answer = result.answer
+        answer = await _adapt_language(chatmodel, context, result.answer)
     elif result.mode == "kibana_fallback" and result.kibana_payload:
         answer = await _naturalize_fallback(
             chatmodel, context, "traffic", "kibana_fallback",
@@ -311,7 +326,7 @@ async def invoke_blocked_agent_node(
     result = await blocked_agent.run(enriched)
 
     if result.mode == "answered" and result.answer:
-        answer = result.answer
+        answer = await _adapt_language(chatmodel, context, result.answer)
     elif result.mode == "kibana_fallback" and result.kibana_payload:
         answer = await _naturalize_fallback(
             chatmodel, context, "blocked", "kibana_fallback",
@@ -341,7 +356,7 @@ async def invoke_consumers_agent_node(
     result = await consumers_agent.run(enriched)
 
     if result.mode == "answered" and result.answer:
-        answer = result.answer
+        answer = await _adapt_language(chatmodel, context, result.answer)
     elif result.mode == "kibana_fallback" and result.kibana_payload:
         answer = await _naturalize_fallback(
             chatmodel, context, "consumers", "kibana_fallback",
@@ -382,7 +397,7 @@ async def answer_directly_node(
 async def compose_response_node(state: IllumioExpertState) -> IllumioExpertState:
     """Append the answer as an AIMessage to the conversation history."""
     logger.info("Node: compose_response")
-    answer = state.get("subagent_answer") or "Je n'ai pas pu traiter votre demande."
+    answer = state.get("subagent_answer") or "I was unable to process your request."
     # Returning {"messages": [...]} causes add_messages to *append* the new
     # AIMessage to the existing list rather than replacing it.
     return {**state, "messages": [AIMessage(content=answer)]}
@@ -512,7 +527,7 @@ class IllumioExpertAgent:
         for msg in reversed(final.get("messages", [])):
             if isinstance(msg, AIMessage):
                 return msg.content
-        return "Je n'ai pas pu traiter votre demande."
+        return "I was unable to process your request."
 
     async def chat_with_history(
         self,
@@ -539,7 +554,7 @@ class IllumioExpertAgent:
         final = await self.graph.ainvoke(initial)
         final_messages = final.get("messages", initial["messages"])
 
-        answer = "Je n'ai pas pu traiter votre demande."
+        answer = "I was unable to process your request."
         for msg in reversed(final_messages):
             if isinstance(msg, AIMessage):
                 answer = msg.content
