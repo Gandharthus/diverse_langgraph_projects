@@ -98,6 +98,7 @@ class IllumioConsumersState(TypedDict, total=False):
 
     # Intent
     app_code:     Optional[str]   # e.g. "AP12345"
+    date_range:   Optional[str]   # ES relative date-math, e.g. "now-1h", "now-7d" (None = no filter)
     intent_error: Optional[str]
 
     # Query
@@ -172,7 +173,9 @@ def _parse_mcp_result(result: Any) -> Any:
     return result
 
 
-def _build_consumers_query(app_code: str, cfg: dict) -> dict:
+def _build_consumers_query(
+    app_code: str, cfg: dict, date_range: str | None = None
+) -> dict:
     """
     Deterministically build the Illumio service-consumers DSL query.
 
@@ -181,25 +184,29 @@ def _build_consumers_query(app_code: str, cfg: dict) -> dict:
       - policy_decision = Allowed
 
     Aggregates source app labels to surface all consuming applications.
+
+    When date_range is provided (e.g. "now-1h", "now-30d") a range filter on
+    @timestamp is added to restrict results to that time window.
     """
-    dst_app_field       = cfg.get("dest_app_field",         "illumio.destination.labels.app")
-    src_app_field       = cfg.get("source_app_field",       "illumio.source.labels.app")
-    policy_field        = cfg.get("policy_decision_field",  "policy_decision")
-    allowed_value       = cfg.get("allowed_value",          "Allowed")
-    agg_size            = cfg.get("agg_size",               20)
-    prefix_tpl          = cfg.get("app_prefix_format",      "A_{app_code}-")
-    app_prefix          = prefix_tpl.format(app_code=app_code)
+    dst_app_field   = cfg.get("dest_app_field",        "illumio.destination.labels.app")
+    src_app_field   = cfg.get("source_app_field",      "illumio.source.labels.app")
+    policy_field    = cfg.get("policy_decision_field", "policy_decision")
+    allowed_value   = cfg.get("allowed_value",         "Allowed")
+    agg_size        = cfg.get("agg_size",              20)
+    timestamp_field = cfg.get("timestamp_field",       "@timestamp")
+    prefix_tpl      = cfg.get("app_prefix_format",     "A_{app_code}-")
+    app_prefix      = prefix_tpl.format(app_code=app_code)
+
+    filters: list[dict] = [
+        {"prefix": {dst_app_field: app_prefix}},
+        {"term":   {policy_field:  allowed_value}},
+    ]
+    if date_range:
+        filters.append({"range": {timestamp_field: {"gte": date_range, "lte": "now"}}})
 
     return {
         "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"prefix": {dst_app_field: app_prefix}},
-                    {"term":   {policy_field:  allowed_value}},
-                ]
-            }
-        },
+        "query": {"bool": {"filter": filters}},
         "aggs": {
             "top_consumers": {
                 "terms": {
@@ -211,23 +218,27 @@ def _build_consumers_query(app_code: str, cfg: dict) -> dict:
     }
 
 
-def _format_consumers_answer(search_result: dict, app_code: str) -> str:
+def _format_consumers_answer(
+    search_result: dict, app_code: str, date_range: str | None = None
+) -> str:
     """Produce the human-readable French answer from an Elasticsearch response."""
     hits      = search_result.get("hits", {})
     total     = hits.get("total", {})
     total_val = total.get("value", 0) if isinstance(total, dict) else int(total or 0)
 
+    period_label = f" (période : {date_range} → now)" if date_range else ""
+
     if total_val == 0:
         return (
-            f"Aucun flux autorisé à destination du service {app_code} n'a été détecté. "
-            f"Aucune application consommatrice identifiée."
+            f"Aucun flux autorisé à destination du service {app_code} "
+            f"n'a été détecté{period_label}. Aucune application consommatrice identifiée."
         )
 
     aggs    = search_result.get("aggregations", {})
     buckets = aggs.get("top_consumers", {}).get("buckets", [])
 
     lines = [
-        f"Les applications suivantes consomment le service {app_code} :",
+        f"Les applications suivantes consomment le service {app_code}{period_label} :",
         "",
         f"Nombre total de flux autorisés détectés : {total_val}",
         "",
@@ -275,12 +286,14 @@ async def parse_intent_node(
         return {
             **state,
             "app_code":     None,
+            "date_range":   None,
             "intent_error": "Impossible d'analyser l'intention depuis la réponse du modèle.",
             "stage": IllumioConsumersStage.FAILED,
             "error": "Intent parsing failed – LLM returned non-JSON output.",
         }
 
-    app_code = intent.get("app_code")
+    app_code   = intent.get("app_code")
+    date_range = intent.get("date_range")  # None means no time filter
 
     if not app_code:
         msg = (
@@ -290,6 +303,7 @@ async def parse_intent_node(
         return {
             **state,
             "app_code":     None,
+            "date_range":   date_range,
             "intent_error": msg,
             "stage": IllumioConsumersStage.FAILED,
             "error": None,
@@ -298,6 +312,7 @@ async def parse_intent_node(
     return {
         **state,
         "app_code":     app_code,
+        "date_range":   date_range,
         "intent_error": None,
         "stage": IllumioConsumersStage.INTENT_PARSED,
     }
@@ -313,9 +328,10 @@ async def build_query_node(
     """Deterministically build the service-consumers DSL query from a template."""
     logger.info("Node: build_query (consumers)")
     app_code      = state.get("app_code", "")
+    date_range    = state.get("date_range")
     index_pattern = cfg.get("illumio_index_pattern", "your-index-*")
 
-    query = _build_consumers_query(app_code, cfg)
+    query = _build_consumers_query(app_code, cfg, date_range)
 
     return {
         **state,
@@ -402,6 +418,7 @@ async def format_answer_node(state: IllumioConsumersState) -> IllumioConsumersSt
     answer = _format_consumers_answer(
         search_result=state.get("search_result", {}),
         app_code=state.get("app_code", ""),
+        date_range=state.get("date_range"),
     )
     return {
         **state,
@@ -513,6 +530,7 @@ class IllumioConsumersResult:
     """Structured output from an Illumio service-consumers agent run."""
 
     app_code:       str | None
+    date_range:     str | None
     query:          dict | None
     index:          str | None
     search_result:  dict | None
@@ -540,6 +558,7 @@ class IllumioConsumersResult:
 
         return cls(
             app_code=state.get("app_code"),
+            date_range=state.get("date_range"),
             query=state.get("query_json"),
             index=state.get("index_pattern"),
             search_result=state.get("search_result"),
@@ -553,10 +572,11 @@ class IllumioConsumersResult:
     def summary(self) -> str:
         lines = [
             "Illumio Service Consumers Agent Result",
-            f"  Mode:      {self.mode}",
-            f"  Stage:     {self.stage.value}",
-            f"  App code:  {self.app_code or '(none)'}",
-            f"  Index:     {self.index or '(none)'}",
+            f"  Mode:       {self.mode}",
+            f"  Stage:      {self.stage.value}",
+            f"  App code:   {self.app_code or '(none)'}",
+            f"  Date range: {self.date_range or '(all time)'}",
+            f"  Index:      {self.index or '(none)'}",
         ]
 
         if self.mode == "answered" and self.answer:
@@ -614,6 +634,7 @@ class IllumioConsumersAgent:
         initial: IllumioConsumersState = {
             "user_request":    request,
             "app_code":        None,
+            "date_range":      None,
             "intent_error":    None,
             "query_json":      None,
             "index_pattern":   None,
