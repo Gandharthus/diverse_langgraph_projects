@@ -79,6 +79,12 @@ class IllumioExpertState(TypedDict, total=False):
     # Error from classification (non-fatal – falls back to "general")
     error: Optional[str]
 
+    # Error from the most recent sub-agent call (None when successful).
+    # Set to a human-readable description whenever a sub-agent falls back to
+    # Kibana or fails entirely, e.g.:
+    #   "Elasticsearch MCP unavailable: <reason>. Kibana fallback provided."
+    call_error: Optional[str]
+
     # Persistent entities extracted from the conversation.
     # Once set, these are retained across turns so sub-agents always have
     # enough context even when the user omits them in follow-up messages.
@@ -251,8 +257,12 @@ async def classify_intent_node(
         SystemMessage(content=ILLUMIO_EXPERT_INTENT_SYSTEM_PROMPT),
         HumanMessage(content=classification_input),
     ]
-    response: AIMessage = await chatmodel.ainvoke(llm_messages)
-    result = _extract_json(response.content)
+    try:
+        response: AIMessage = await chatmodel.ainvoke(llm_messages)
+        result = _extract_json(response.content)
+    except Exception as exc:
+        logger.exception("classify_intent LLM call failed")
+        return {**state, "intent": "general", "error": f"Intent classification failed: {exc}"}
 
     intent = "general"  # safe default
     if result and isinstance(result.get("intent"), str):
@@ -293,22 +303,46 @@ async def invoke_traffic_agent_node(
     context = _format_conversation_context(messages)
     enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
 
-    result = await traffic_agent.run(enriched)
+    try:
+        result = await traffic_agent.run(enriched)
+    except Exception as exc:
+        logger.exception("Traffic agent run raised an unexpected exception")
+        call_error = f"Traffic agent crashed unexpectedly: {exc}"
+        return {
+            **state,
+            "subagent_answer": await _naturalize_fallback(
+                chatmodel, context, "traffic", "failed", [call_error], None
+            ),
+            "call_error": call_error,
+        }
 
+    call_error: str | None = None
     if result.mode == "answered" and result.answer:
         answer = await _adapt_language(chatmodel, context, result.answer)
     elif result.mode == "kibana_fallback" and result.kibana_payload:
+        error_detail = (": " + "; ".join(result.errors)) if result.errors else ""
+        call_error = (
+            f"Elasticsearch MCP access failed{error_detail}. "
+            "Kibana fallback query provided instead."
+        )
+        logger.warning("Traffic agent kibana_fallback – %s", call_error)
         answer = await _naturalize_fallback(
             chatmodel, context, "traffic", "kibana_fallback",
             result.errors, result.kibana_payload,
         )
     else:
+        call_error = (
+            "; ".join(result.errors)
+            if result.errors
+            else "Traffic agent failed with unknown error."
+        )
+        logger.error("Traffic agent failed – %s", call_error)
         answer = await _naturalize_fallback(
             chatmodel, context, "traffic", "failed",
             result.errors, None,
         )
 
-    return {**state, "subagent_answer": answer}
+    return {**state, "subagent_answer": answer, "call_error": call_error}
 
 
 async def invoke_blocked_agent_node(
@@ -323,22 +357,46 @@ async def invoke_blocked_agent_node(
     context = _format_conversation_context(messages)
     enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
 
-    result = await blocked_agent.run(enriched)
+    try:
+        result = await blocked_agent.run(enriched)
+    except Exception as exc:
+        logger.exception("Blocked agent run raised an unexpected exception")
+        call_error = f"Blocked-flows agent crashed unexpectedly: {exc}"
+        return {
+            **state,
+            "subagent_answer": await _naturalize_fallback(
+                chatmodel, context, "blocked", "failed", [call_error], None
+            ),
+            "call_error": call_error,
+        }
 
+    call_error: str | None = None
     if result.mode == "answered" and result.answer:
         answer = await _adapt_language(chatmodel, context, result.answer)
     elif result.mode == "kibana_fallback" and result.kibana_payload:
+        error_detail = (": " + "; ".join(result.errors)) if result.errors else ""
+        call_error = (
+            f"Elasticsearch MCP access failed{error_detail}. "
+            "Kibana fallback query provided instead."
+        )
+        logger.warning("Blocked agent kibana_fallback – %s", call_error)
         answer = await _naturalize_fallback(
             chatmodel, context, "blocked", "kibana_fallback",
             result.errors, result.kibana_payload,
         )
     else:
+        call_error = (
+            "; ".join(result.errors)
+            if result.errors
+            else "Blocked-flows agent failed with unknown error."
+        )
+        logger.error("Blocked agent failed – %s", call_error)
         answer = await _naturalize_fallback(
             chatmodel, context, "blocked", "failed",
             result.errors, None,
         )
 
-    return {**state, "subagent_answer": answer}
+    return {**state, "subagent_answer": answer, "call_error": call_error}
 
 
 async def invoke_consumers_agent_node(
@@ -353,22 +411,46 @@ async def invoke_consumers_agent_node(
     context = _format_conversation_context(messages)
     enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
 
-    result = await consumers_agent.run(enriched)
+    try:
+        result = await consumers_agent.run(enriched)
+    except Exception as exc:
+        logger.exception("Consumers agent run raised an unexpected exception")
+        call_error = f"Service-consumers agent crashed unexpectedly: {exc}"
+        return {
+            **state,
+            "subagent_answer": await _naturalize_fallback(
+                chatmodel, context, "consumers", "failed", [call_error], None
+            ),
+            "call_error": call_error,
+        }
 
+    call_error: str | None = None
     if result.mode == "answered" and result.answer:
         answer = await _adapt_language(chatmodel, context, result.answer)
     elif result.mode == "kibana_fallback" and result.kibana_payload:
+        error_detail = (": " + "; ".join(result.errors)) if result.errors else ""
+        call_error = (
+            f"Elasticsearch MCP access failed{error_detail}. "
+            "Kibana fallback query provided instead."
+        )
+        logger.warning("Consumers agent kibana_fallback – %s", call_error)
         answer = await _naturalize_fallback(
             chatmodel, context, "consumers", "kibana_fallback",
             result.errors, result.kibana_payload,
         )
     else:
+        call_error = (
+            "; ".join(result.errors)
+            if result.errors
+            else "Service-consumers agent failed with unknown error."
+        )
+        logger.error("Consumers agent failed – %s", call_error)
         answer = await _naturalize_fallback(
             chatmodel, context, "consumers", "failed",
             result.errors, None,
         )
 
-    return {**state, "subagent_answer": answer}
+    return {**state, "subagent_answer": answer, "call_error": call_error}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -386,8 +468,17 @@ async def answer_directly_node(
     llm_messages: list[BaseMessage] = [SystemMessage(content=ILLUMIO_EXPERT_SYSTEM_PROMPT)]
     llm_messages.extend(messages)
 
-    response: AIMessage = await chatmodel.ainvoke(llm_messages)
-    return {**state, "subagent_answer": response.content}
+    try:
+        response: AIMessage = await chatmodel.ainvoke(llm_messages)
+        return {**state, "subagent_answer": response.content, "call_error": None}
+    except Exception as exc:
+        logger.exception("Direct LLM answer failed")
+        call_error = f"Direct answer LLM call failed: {exc}"
+        return {
+            **state,
+            "subagent_answer": "Je suis désolé, je ne suis pas en mesure de traiter votre demande pour le moment.",
+            "call_error": call_error,
+        }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -520,6 +611,7 @@ class IllumioExpertAgent:
             "intent":          None,
             "subagent_answer": None,
             "error":           None,
+            "call_error":      None,
             "ap_code":         None,
             "hostname":        None,
         }
@@ -535,19 +627,22 @@ class IllumioExpertAgent:
         history: list[BaseMessage],
         ap_code:  str | None = None,
         hostname: str | None = None,
-    ) -> tuple[list[BaseMessage], str, str | None, str | None]:
+    ) -> tuple[list[BaseMessage], str, str | None, str | None, str | None]:
         """Multi-turn: process one message with existing history.
 
         Accepts and returns ``ap_code`` / ``hostname`` so callers can persist
         them across turns without re-parsing the message themselves.
 
-        Returns ``(updated_messages, answer, ap_code, hostname)``.
+        Returns ``(updated_messages, answer, ap_code, hostname, call_error)``.
+        ``call_error`` is ``None`` on success, or a human-readable description
+        of what went wrong when a sub-agent fell back to Kibana or failed.
         """
         initial: IllumioExpertState = {
             "messages":        [*history, HumanMessage(content=user_message)],
             "intent":          None,
             "subagent_answer": None,
             "error":           None,
+            "call_error":      None,
             "ap_code":         ap_code,
             "hostname":        hostname,
         }
@@ -565,4 +660,5 @@ class IllumioExpertAgent:
             answer,
             final.get("ap_code"),
             final.get("hostname"),
+            final.get("call_error"),
         )

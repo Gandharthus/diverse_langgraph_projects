@@ -417,8 +417,21 @@ async def parse_intent_node(
         SystemMessage(content=ILLUMIO_BLOCKED_INTENT_SYSTEM_PROMPT),
         HumanMessage(content=user_request),
     ]
-    response: AIMessage = await chatmodel.ainvoke(messages)
-    intent = _extract_json(response.content)
+    try:
+        response: AIMessage = await chatmodel.ainvoke(messages)
+        intent = _extract_json(response.content)
+    except Exception as exc:
+        logger.exception("parse_intent (blocked) LLM call failed")
+        return {
+            **state,
+            "target":       None,
+            "target_type":  None,
+            "direction":    None,
+            "date_range":   None,
+            "intent_error": "Erreur lors de l'appel au modèle de langage.",
+            "stage": IllumioBlockedStage.FAILED,
+            "error": f"Intent parsing LLM call failed: {exc}",
+        }
 
     if intent is None:
         return {
