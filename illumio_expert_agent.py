@@ -43,6 +43,7 @@ from illumio_blocked_agent import IllumioBlockedAgent
 from illumio_consumers_agent import IllumioConsumersAgent
 from illumio_expert_prompts import (
     ILLUMIO_EXPERT_INTENT_SYSTEM_PROMPT,
+    ILLUMIO_EXPERT_NATURAL_RESPONSE_PROMPT,
     ILLUMIO_EXPERT_SYSTEM_PROMPT,
 )
 
@@ -136,6 +137,56 @@ def _format_conversation_context(messages: list[BaseMessage], max_turns: int = 6
     return "\n".join(lines)
 
 
+_INTENT_DESCRIPTIONS: dict[str, str] = {
+    "traffic":   "cross-environment traffic analysis (dev ↔ prod flows)",
+    "blocked":   "blocked / denied flow analysis",
+    "consumers": "service consumer discovery (which apps connect to a service)",
+}
+
+
+async def _naturalize_fallback(
+    chatmodel: ChatOpenAI,
+    conversation_context: str,
+    intent: str,
+    mode: str,  # "kibana_fallback" | "failed"
+    errors: list[str],
+    kibana_payload: str | None,
+) -> str:
+    """Ask the LLM to produce a natural, language-aware response for fallback/error cases.
+
+    For *kibana_fallback*: the LLM wraps the Kibana query in a friendly message.
+    For *failed*: the LLM figures out what info is missing and asks for it naturally.
+    """
+    intent_desc = _INTENT_DESCRIPTIONS.get(intent, intent)
+
+    if mode == "kibana_fallback" and kibana_payload:
+        situation = "Direct Elasticsearch access is unavailable."
+        extra = (
+            "You have a Kibana Dev Tools query that the user can run manually to get "
+            "the data they need. Present it as a useful next step:\n\n"
+            f"```\n{kibana_payload}\n```"
+        )
+    else:
+        error_str = "; ".join(errors) if errors else "Unknown error."
+        situation = f"The query could not be completed. Technical reason: {error_str}"
+        extra = (
+            "If the failure is because the user did not provide a required identifier "
+            "(such as an AP code, a hostname, or an application name), ask for it "
+            "naturally and positively — do NOT apologise excessively. "
+            "Otherwise, briefly explain the issue and suggest what the user can do next."
+        )
+
+    prompt = ILLUMIO_EXPERT_NATURAL_RESPONSE_PROMPT.format(
+        intent_description=intent_desc,
+        conversation_context=conversation_context,
+        situation_description=situation,
+        extra_context=extra,
+    )
+
+    response: AIMessage = await chatmodel.ainvoke([SystemMessage(content=prompt)])
+    return response.content
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Node: Classify intent
 # ─────────────────────────────────────────────────────────────────────────────
@@ -182,26 +233,27 @@ async def classify_intent_node(
 async def invoke_traffic_agent_node(
     state: IllumioExpertState,
     traffic_agent: IllumioTrafficAgent,
+    chatmodel: ChatOpenAI,
 ) -> IllumioExpertState:
     """Delegate to the IllumioTrafficAgent sub-agent."""
     logger.info("Node: invoke_traffic_agent")
-    user_request = _last_human_message(state.get("messages", []))
+    messages = state.get("messages", [])
+    user_request = _last_human_message(messages)
+    context = _format_conversation_context(messages)
 
     result = await traffic_agent.run(user_request)
 
     if result.mode == "answered" and result.answer:
         answer = result.answer
     elif result.mode == "kibana_fallback" and result.kibana_payload:
-        answer = (
-            "Je n'ai pas pu accéder directement à Elasticsearch. "
-            "Voici la requête Kibana Dev Tools pour analyser le trafic inter-environnements :\n\n"
-            f"```\n{result.kibana_payload}\n```"
+        answer = await _naturalize_fallback(
+            chatmodel, context, "traffic", "kibana_fallback",
+            result.errors, result.kibana_payload,
         )
     else:
-        errors = "; ".join(result.errors) if result.errors else "Erreur inconnue."
-        answer = (
-            f"Je n'ai pas pu répondre à votre question sur le trafic "
-            f"inter-environnements : {errors}"
+        answer = await _naturalize_fallback(
+            chatmodel, context, "traffic", "failed",
+            result.errors, None,
         )
 
     return {**state, "subagent_answer": answer}
@@ -210,24 +262,28 @@ async def invoke_traffic_agent_node(
 async def invoke_blocked_agent_node(
     state: IllumioExpertState,
     blocked_agent: IllumioBlockedAgent,
+    chatmodel: ChatOpenAI,
 ) -> IllumioExpertState:
     """Delegate to the IllumioBlockedAgent sub-agent."""
     logger.info("Node: invoke_blocked_agent")
-    user_request = _last_human_message(state.get("messages", []))
+    messages = state.get("messages", [])
+    user_request = _last_human_message(messages)
+    context = _format_conversation_context(messages)
 
     result = await blocked_agent.run(user_request)
 
     if result.mode == "answered" and result.answer:
         answer = result.answer
     elif result.mode == "kibana_fallback" and result.kibana_payload:
-        answer = (
-            "Je n'ai pas pu accéder directement à Elasticsearch. "
-            "Voici la requête Kibana Dev Tools pour les flux bloqués :\n\n"
-            f"```\n{result.kibana_payload}\n```"
+        answer = await _naturalize_fallback(
+            chatmodel, context, "blocked", "kibana_fallback",
+            result.errors, result.kibana_payload,
         )
     else:
-        errors = "; ".join(result.errors) if result.errors else "Erreur inconnue."
-        answer = f"Je n'ai pas pu répondre à votre question sur les flux bloqués : {errors}"
+        answer = await _naturalize_fallback(
+            chatmodel, context, "blocked", "failed",
+            result.errors, None,
+        )
 
     return {**state, "subagent_answer": answer}
 
@@ -235,26 +291,27 @@ async def invoke_blocked_agent_node(
 async def invoke_consumers_agent_node(
     state: IllumioExpertState,
     consumers_agent: IllumioConsumersAgent,
+    chatmodel: ChatOpenAI,
 ) -> IllumioExpertState:
     """Delegate to the IllumioConsumersAgent sub-agent."""
     logger.info("Node: invoke_consumers_agent")
-    user_request = _last_human_message(state.get("messages", []))
+    messages = state.get("messages", [])
+    user_request = _last_human_message(messages)
+    context = _format_conversation_context(messages)
 
     result = await consumers_agent.run(user_request)
 
     if result.mode == "answered" and result.answer:
         answer = result.answer
     elif result.mode == "kibana_fallback" and result.kibana_payload:
-        answer = (
-            "Je n'ai pas pu accéder directement à Elasticsearch. "
-            "Voici la requête Kibana Dev Tools pour les consommateurs du service :\n\n"
-            f"```\n{result.kibana_payload}\n```"
+        answer = await _naturalize_fallback(
+            chatmodel, context, "consumers", "kibana_fallback",
+            result.errors, result.kibana_payload,
         )
     else:
-        errors = "; ".join(result.errors) if result.errors else "Erreur inconnue."
-        answer = (
-            f"Je n'ai pas pu répondre à votre question sur les consommateurs "
-            f"du service : {errors}"
+        answer = await _naturalize_fallback(
+            chatmodel, context, "consumers", "failed",
+            result.errors, None,
         )
 
     return {**state, "subagent_answer": answer}
@@ -318,13 +375,13 @@ def build_illumio_expert_graph(
         return await classify_intent_node(s, chatmodel)
 
     async def _invoke_traffic(s: IllumioExpertState) -> IllumioExpertState:
-        return await invoke_traffic_agent_node(s, traffic_agent)
+        return await invoke_traffic_agent_node(s, traffic_agent, chatmodel)
 
     async def _invoke_blocked(s: IllumioExpertState) -> IllumioExpertState:
-        return await invoke_blocked_agent_node(s, blocked_agent)
+        return await invoke_blocked_agent_node(s, blocked_agent, chatmodel)
 
     async def _invoke_consumers(s: IllumioExpertState) -> IllumioExpertState:
-        return await invoke_consumers_agent_node(s, consumers_agent)
+        return await invoke_consumers_agent_node(s, consumers_agent, chatmodel)
 
     async def _answer_directly(s: IllumioExpertState) -> IllumioExpertState:
         return await answer_directly_node(s, chatmodel)
