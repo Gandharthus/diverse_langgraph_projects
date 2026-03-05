@@ -194,6 +194,8 @@ def _build_traffic_query(app_code: str, direction: str, cfg: dict) -> dict:
 
     if direction == "prod_to_dev":
         src_env, dst_env = prod_env, dev_env
+    elif direction == "prod_to_prod":
+        src_env, dst_env = prod_env, prod_env
     else:  # default: dev_to_prod
         src_env, dst_env = dev_env, prod_env
 
@@ -228,6 +230,9 @@ def _format_answer(search_result: dict, app_code: str, direction: str) -> str:
     if direction == "dev_to_prod":
         dir_label = "l'environnement de développement vers l'environnement de production"
         src_label = "développement"
+    elif direction == "prod_to_prod":
+        dir_label = "l'environnement de production vers l'environnement de production"
+        src_label = "production (sources)"
     else:
         dir_label = "l'environnement de production vers l'environnement de développement"
         src_label = "production"
@@ -301,7 +306,7 @@ async def parse_intent_node(
     direction = intent.get("direction", "dev_to_prod")
 
     # Guard against unexpected direction values
-    if direction not in ("dev_to_prod", "prod_to_dev"):
+    if direction not in ("dev_to_prod", "prod_to_dev", "prod_to_prod"):
         direction = "dev_to_prod"
 
     if not app_code:

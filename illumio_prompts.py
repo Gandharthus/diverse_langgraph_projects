@@ -25,6 +25,11 @@ Your only task is to extract two values from the user's question:
                • "prod_to_dev"  – FROM production TO development
                  (use this when the user explicitly asks about prod→dev
                   or production-to-development traffic)
+               • "prod_to_prod" – FROM production TO production
+                 (use this when the user asks which other production apps
+                  or labels communicate with their app in production,
+                  e.g. "who talks to my app in prod?", "prod to prod flows",
+                  "list producers of my app in production")
 
 Return ONLY a valid JSON object – no prose, no markdown code fences:
 {"app_code": "AP12345", "direction": "dev_to_prod"}
