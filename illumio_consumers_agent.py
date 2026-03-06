@@ -107,6 +107,7 @@ class IllumioConsumersState(TypedDict, total=False):
     app_role:     Optional[str]   # "source" | "destination"
     source_env:   Optional[str]   # "E_PROD" | "E_DEV" | None
     dest_env:     Optional[str]   # "E_PROD" | "E_DEV" | None
+
     intent_error: Optional[str]
 
     # Query
@@ -187,6 +188,7 @@ def _build_consumers_query(
     app_role: str = "destination",
     source_env: str | None = None,
     dest_env: str | None = None,
+    app_code: str, cfg: dict, date_range: str | None = None
 ) -> dict:
     """
     Deterministically build the Illumio service-consumers DSL query.
@@ -334,8 +336,19 @@ async def parse_intent_node(
         SystemMessage(content=ILLUMIO_CONSUMERS_INTENT_SYSTEM_PROMPT),
         HumanMessage(content=user_request),
     ]
-    response: AIMessage = await chatmodel.ainvoke(messages)
-    intent = _extract_json(response.content)
+    try:
+        response: AIMessage = await chatmodel.ainvoke(messages)
+        intent = _extract_json(response.content)
+    except Exception as exc:
+        logger.exception("parse_intent (consumers) LLM call failed")
+        return {
+            **state,
+            "app_code":     None,
+            "date_range":   None,
+            "intent_error": "Erreur lors de l'appel au modèle de langage.",
+            "stage": IllumioConsumersStage.FAILED,
+            "error": f"Intent parsing LLM call failed: {exc}",
+        }
 
     if intent is None:
         return {

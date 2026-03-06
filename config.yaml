@@ -253,6 +253,9 @@ illumio_agent:
   # Maximum number of source-application buckets returned by the aggregation
   agg_size: 50
 
+  # Timestamp field used for date-range filtering
+  timestamp_field: "@timestamp"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Illumio Blocked Flows Agent – Configuration
@@ -286,6 +289,9 @@ illumio_blocked_agent:
   # Maximum number of buckets returned per aggregation
   agg_size: 20
 
+  # Timestamp field used for date-range filtering
+  timestamp_field: "@timestamp"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Illumio Service Consumers Agent – Configuration
@@ -317,3 +323,6 @@ illumio_consumers_agent:
 
   # Maximum number of consumer application buckets returned by the aggregation
   agg_size: 20
+
+  # Timestamp field used for date-range filtering
+  timestamp_field: "@timestamp"
