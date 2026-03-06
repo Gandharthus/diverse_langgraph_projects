@@ -2,17 +2,23 @@
 Illumio Service Consumers Agent
 ================================
 
-A LangGraph-based agent that answers:
+A LangGraph-based agent that answers questions such as:
 
   "Quelles sont toutes les applications qui consomment mon service ?"
+  "Quelles sont toutes les applis de dev qui sont appellées par mon applis de prod ?"
 
 The agent:
-  1. Parses the user's natural-language request to extract the application
-     code (Code AP, e.g. AP12345).
+  1. Parses the user's natural-language request to extract:
+       - app_code  : the application portfolio code (e.g. AP12345)
+       - app_role  : whether the user's app is the SOURCE (caller) or
+                     DESTINATION (callee) in the traffic flow
+       - source_env: optional env filter for the source side (E_PROD / E_DEV)
+       - dest_env  : optional env filter for the destination side (E_PROD / E_DEV)
   2. Deterministically builds the Elasticsearch DSL query from a template:
-       - Filters on the destination app label (prefix "A_<app_code>-")
+       - Filters on the app label prefix ("A_<app_code>-") on the appropriate side
        - Filters on policy_decision = "Allowed"
-       - Aggregates source app labels to identify all consumers
+       - Optionally adds term filters on label.env for source and/or destination
+       - Aggregates the peer side's app labels to identify all consumers/callees
   3. Executes the query via the MCP ``search`` tool.
   4. Formats the result into a human-readable answer (in French).
   5. Falls back to a Kibana Dev Tools payload when direct index access is
@@ -98,7 +104,10 @@ class IllumioConsumersState(TypedDict, total=False):
 
     # Intent
     app_code:     Optional[str]   # e.g. "AP12345"
-    date_range:   Optional[str]   # ES relative date-math, e.g. "now-1h", "now-7d" (None = no filter)
+    app_role:     Optional[str]   # "source" | "destination"
+    source_env:   Optional[str]   # "E_PROD" | "E_DEV" | None
+    dest_env:     Optional[str]   # "E_PROD" | "E_DEV" | None
+
     intent_error: Optional[str]
 
     # Query
@@ -174,43 +183,65 @@ def _parse_mcp_result(result: Any) -> Any:
 
 
 def _build_consumers_query(
+    app_code: str,
+    cfg: dict,
+    app_role: str = "destination",
+    source_env: str | None = None,
+    dest_env: str | None = None,
     app_code: str, cfg: dict, date_range: str | None = None
 ) -> dict:
     """
     Deterministically build the Illumio service-consumers DSL query.
 
     Filters on:
-      - destination app label prefix matching the user's application
+      - app label prefix for the user's application (source or destination side
+        depending on ``app_role``)
       - policy_decision = Allowed
+      - optional source/destination environment labels (E_PROD / E_DEV)
 
-    Aggregates source app labels to surface all consuming applications.
-
-    When date_range is provided (e.g. "now-1h", "now-30d") a range filter on
-    @timestamp is added to restrict results to that time window.
+    Aggregates the opposite side's app labels to surface all peer applications.
     """
-    dst_app_field   = cfg.get("dest_app_field",        "illumio.destination.labels.app")
-    src_app_field   = cfg.get("source_app_field",      "illumio.source.labels.app")
-    policy_field    = cfg.get("policy_decision_field", "policy_decision")
-    allowed_value   = cfg.get("allowed_value",         "Allowed")
-    agg_size        = cfg.get("agg_size",              20)
-    timestamp_field = cfg.get("timestamp_field",       "@timestamp")
-    prefix_tpl      = cfg.get("app_prefix_format",     "A_{app_code}-")
-    app_prefix      = prefix_tpl.format(app_code=app_code)
+    dst_app_field  = cfg.get("dest_app_field",        "illumio.destination.labels.app")
+    src_app_field  = cfg.get("source_app_field",      "illumio.source.labels.app")
+    src_env_field  = cfg.get("source_env_field",      "illumio.source.labels.env")
+    dst_env_field  = cfg.get("dest_env_field",        "illumio.destination.labels.env")
+    policy_field   = cfg.get("policy_decision_field", "policy_decision")
+    allowed_value  = cfg.get("allowed_value",         "Allowed")
+    agg_size       = cfg.get("agg_size",              20)
+    prefix_tpl     = cfg.get("app_prefix_format",     "A_{app_code}-")
+    app_prefix     = prefix_tpl.format(app_code=app_code)
+
+    # Determine which side carries the user's app code and which side to aggregate
+    if app_role == "source":
+        app_filter_field = src_app_field
+        agg_field        = dst_app_field
+        agg_name         = "top_callees"
+    else:  # "destination" – default / backward-compatible
+        app_filter_field = dst_app_field
+        agg_field        = src_app_field
+        agg_name         = "top_consumers"
 
     filters: list[dict] = [
-        {"prefix": {dst_app_field: app_prefix}},
-        {"term":   {policy_field:  allowed_value}},
+        {"prefix": {app_filter_field: app_prefix}},
+        {"term":   {policy_field:     allowed_value}},
     ]
-    if date_range:
-        filters.append({"range": {timestamp_field: {"gte": date_range, "lte": "now"}}})
+
+    if source_env:
+        filters.append({"term": {src_env_field: source_env}})
+    if dest_env:
+        filters.append({"term": {dst_env_field: dest_env}})
 
     return {
         "size": 0,
-        "query": {"bool": {"filter": filters}},
+        "query": {
+            "bool": {
+                "filter": filters,
+            }
+        },
         "aggs": {
-            "top_consumers": {
+            agg_name: {
                 "terms": {
-                    "field": src_app_field,
+                    "field": agg_field,
                     "size":  agg_size,
                 }
             }
@@ -219,30 +250,56 @@ def _build_consumers_query(
 
 
 def _format_consumers_answer(
-    search_result: dict, app_code: str, date_range: str | None = None
+    search_result: dict,
+    app_code: str,
+    app_role: str = "destination",
+    source_env: str | None = None,
+    dest_env: str | None = None,
 ) -> str:
     """Produce the human-readable French answer from an Elasticsearch response."""
     hits      = search_result.get("hits", {})
     total     = hits.get("total", {})
     total_val = total.get("value", 0) if isinstance(total, dict) else int(total or 0)
 
-    period_label = f" (période : {date_range} → now)" if date_range else ""
+    # Build a human-readable description of the query context
+    env_label = {
+        "E_PROD": "production",
+        "E_DEV":  "développement",
+    }
+
+    if app_role == "source":
+        src_env_str  = env_label.get(source_env, source_env) if source_env else None
+        dst_env_str  = env_label.get(dest_env,   dest_env)   if dest_env   else None
+        src_desc = f"l'application {src_env_str} {app_code}" if src_env_str else f"l'application {app_code}"
+        dst_desc = f"applications de {dst_env_str}" if dst_env_str else "applications"
+        header   = f"Applications de type « {dst_desc} » appelées par {src_desc} :"
+        no_flow  = f"Aucun flux autorisé depuis {src_desc} vers des {dst_desc} n'a été détecté."
+        agg_key  = "top_callees"
+        agg_label = f"Applications appelées identifiées"
+        empty_label = "aucune application de destination identifiée dans les agrégations"
+    else:
+        src_env_str  = env_label.get(source_env, source_env) if source_env else None
+        dst_env_str  = env_label.get(dest_env,   dest_env)   if dest_env   else None
+        svc_desc = f"le service {dst_env_str} {app_code}" if dst_env_str else f"le service {app_code}"
+        src_desc = f"applications de {src_env_str}" if src_env_str else "applications"
+        header   = f"Applications consommatrices du service {app_code} :"
+        no_flow  = f"Aucun flux autorisé à destination de {svc_desc} n'a été détecté. Aucune application consommatrice identifiée."
+        agg_key  = "top_consumers"
+        agg_label = f"Applications consommatrices identifiées"
+        empty_label = "aucune application source identifiée dans les agrégations"
 
     if total_val == 0:
-        return (
-            f"Aucun flux autorisé à destination du service {app_code} "
-            f"n'a été détecté{period_label}. Aucune application consommatrice identifiée."
-        )
+        return no_flow
 
     aggs    = search_result.get("aggregations", {})
-    buckets = aggs.get("top_consumers", {}).get("buckets", [])
+    buckets = aggs.get(agg_key, {}).get("buckets", [])
 
     lines = [
-        f"Les applications suivantes consomment le service {app_code}{period_label} :",
+        header,
         "",
         f"Nombre total de flux autorisés détectés : {total_val}",
         "",
-        f"Applications consommatrices identifiées ({len(buckets)}) :",
+        f"{agg_label} ({len(buckets)}) :",
     ]
     for b in buckets:
         key   = b.get("key", "?")
@@ -250,7 +307,7 @@ def _format_consumers_answer(
         lines.append(f"  • {key}  ({count} flux)")
 
     if not buckets:
-        lines.append("  (aucune application source identifiée dans les agrégations)")
+        lines.append(f"  ({empty_label})")
 
     return "\n".join(lines)
 
@@ -297,14 +354,28 @@ async def parse_intent_node(
         return {
             **state,
             "app_code":     None,
-            "date_range":   None,
+            "app_role":     None,
+            "source_env":   None,
+            "dest_env":     None,
             "intent_error": "Impossible d'analyser l'intention depuis la réponse du modèle.",
             "stage": IllumioConsumersStage.FAILED,
             "error": "Intent parsing failed – LLM returned non-JSON output.",
         }
 
     app_code   = intent.get("app_code")
-    date_range = intent.get("date_range")  # None means no time filter
+    app_role   = intent.get("app_role", "destination") or "destination"
+    source_env = intent.get("source_env") or None
+    dest_env   = intent.get("dest_env")   or None
+
+    # Validate env values
+    valid_envs = {"E_PROD", "E_DEV", None}
+    if source_env not in valid_envs:
+        source_env = None
+    if dest_env not in valid_envs:
+        dest_env = None
+
+    if app_role not in ("source", "destination"):
+        app_role = "destination"
 
     if not app_code:
         msg = (
@@ -314,7 +385,9 @@ async def parse_intent_node(
         return {
             **state,
             "app_code":     None,
-            "date_range":   date_range,
+            "app_role":     app_role,
+            "source_env":   source_env,
+            "dest_env":     dest_env,
             "intent_error": msg,
             "stage": IllumioConsumersStage.FAILED,
             "error": None,
@@ -323,7 +396,9 @@ async def parse_intent_node(
     return {
         **state,
         "app_code":     app_code,
-        "date_range":   date_range,
+        "app_role":     app_role,
+        "source_env":   source_env,
+        "dest_env":     dest_env,
         "intent_error": None,
         "stage": IllumioConsumersStage.INTENT_PARSED,
     }
@@ -339,10 +414,18 @@ async def build_query_node(
     """Deterministically build the service-consumers DSL query from a template."""
     logger.info("Node: build_query (consumers)")
     app_code      = state.get("app_code", "")
-    date_range    = state.get("date_range")
+    app_role      = state.get("app_role", "destination") or "destination"
+    source_env    = state.get("source_env")
+    dest_env      = state.get("dest_env")
     index_pattern = cfg.get("illumio_index_pattern", "your-index-*")
 
-    query = _build_consumers_query(app_code, cfg, date_range)
+    query = _build_consumers_query(
+        app_code,
+        cfg,
+        app_role=app_role,
+        source_env=source_env,
+        dest_env=dest_env,
+    )
 
     return {
         **state,
@@ -429,7 +512,9 @@ async def format_answer_node(state: IllumioConsumersState) -> IllumioConsumersSt
     answer = _format_consumers_answer(
         search_result=state.get("search_result", {}),
         app_code=state.get("app_code", ""),
-        date_range=state.get("date_range"),
+        app_role=state.get("app_role", "destination") or "destination",
+        source_env=state.get("source_env"),
+        dest_env=state.get("dest_env"),
     )
     return {
         **state,
@@ -541,7 +626,9 @@ class IllumioConsumersResult:
     """Structured output from an Illumio service-consumers agent run."""
 
     app_code:       str | None
-    date_range:     str | None
+    app_role:       str | None
+    source_env:     str | None
+    dest_env:       str | None
     query:          dict | None
     index:          str | None
     search_result:  dict | None
@@ -569,7 +656,9 @@ class IllumioConsumersResult:
 
         return cls(
             app_code=state.get("app_code"),
-            date_range=state.get("date_range"),
+            app_role=state.get("app_role"),
+            source_env=state.get("source_env"),
+            dest_env=state.get("dest_env"),
             query=state.get("query_json"),
             index=state.get("index_pattern"),
             search_result=state.get("search_result"),
@@ -586,7 +675,9 @@ class IllumioConsumersResult:
             f"  Mode:       {self.mode}",
             f"  Stage:      {self.stage.value}",
             f"  App code:   {self.app_code or '(none)'}",
-            f"  Date range: {self.date_range or '(all time)'}",
+            f"  App role:   {self.app_role or '(none)'}",
+            f"  Source env: {self.source_env or '(any)'}",
+            f"  Dest env:   {self.dest_env or '(any)'}",
             f"  Index:      {self.index or '(none)'}",
         ]
 
@@ -645,7 +736,9 @@ class IllumioConsumersAgent:
         initial: IllumioConsumersState = {
             "user_request":    request,
             "app_code":        None,
-            "date_range":      None,
+            "app_role":        None,
+            "source_env":      None,
+            "dest_env":        None,
             "intent_error":    None,
             "query_json":      None,
             "index_pattern":   None,
