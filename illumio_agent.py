@@ -170,23 +170,6 @@ def _parse_mcp_result(result: Any) -> Any:
     return result
 
 
-def _unwrap_exception(exc: BaseException) -> str:
-    """Recursively unwrap ExceptionGroup / anyio TaskGroup exceptions.
-
-    Python 3.11+ and anyio wrap task failures in an ExceptionGroup whose
-    ``exceptions`` attribute holds the actual sub-exceptions.  Stringifying
-    the group directly only yields the opaque
-    "unhandled errors in a TaskGroup (N sub-exceptions)" message, hiding the
-    real cause.  This helper drills down to expose every leaf error so the
-    full details land in ``execution_error`` (visible in LangSmith) without
-    surfacing anything extra to the end-user.
-    """
-    if hasattr(exc, "exceptions") and exc.exceptions:
-        parts = "; ".join(_unwrap_exception(e) for e in exc.exceptions)
-        return f"{type(exc).__name__}({parts})"
-    return f"{type(exc).__name__}: {exc}"
-
-
 def _build_traffic_query(
     app_code: str, direction: str, cfg: dict, date_range: str | None = None
 ) -> dict:
@@ -448,15 +431,11 @@ async def execute_search_node(
         }
 
     except Exception as exc:
-        error_msg = _unwrap_exception(exc)
-        logger.error("Search execution failed: %s", error_msg, exc_info=True)
-        if hasattr(exc, "exceptions"):
-            for i, sub in enumerate(exc.exceptions, 1):
-                logger.error("  Sub-exception %d: %s", i, _unwrap_exception(sub), exc_info=sub)
+        logger.exception("Search execution failed")
         return {
             **state,
             "search_result":   None,
-            "execution_error": f"Search failed: {error_msg}",
+            "execution_error": f"Search exception: {exc}",
             "stage": IllumioStage.EXECUTED,
         }
 
