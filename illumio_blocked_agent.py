@@ -177,6 +177,23 @@ def _parse_mcp_result(result: Any) -> Any:
     return result
 
 
+def _unwrap_exception(exc: BaseException) -> str:
+    """Recursively unwrap ExceptionGroup / anyio TaskGroup exceptions.
+
+    Python 3.11+ and anyio wrap task failures in an ExceptionGroup whose
+    ``exceptions`` attribute holds the actual sub-exceptions.  Stringifying
+    the group directly only yields the opaque
+    "unhandled errors in a TaskGroup (N sub-exceptions)" message, hiding the
+    real cause.  This helper drills down to expose every leaf error so the
+    full details land in ``execution_error`` (visible in LangSmith) without
+    surfacing anything extra to the end-user.
+    """
+    if hasattr(exc, "exceptions") and exc.exceptions:
+        parts = "; ".join(_unwrap_exception(e) for e in exc.exceptions)
+        return f"{type(exc).__name__}({parts})"
+    return f"{type(exc).__name__}: {exc}"
+
+
 def _build_blocked_queries(
     target: str,
     target_type: str,
@@ -552,7 +569,12 @@ async def execute_search_node(
                 else:
                     inbound_result = parsed
             except Exception as exc:
-                errors.append(f"Inbound search exception: {exc}")
+                error_msg = _unwrap_exception(exc)
+                logger.error("Inbound search failed: %s", error_msg, exc_info=True)
+                if hasattr(exc, "exceptions"):
+                    for i, sub in enumerate(exc.exceptions, 1):
+                        logger.error("  Sub-exception %d: %s", i, _unwrap_exception(sub), exc_info=sub)
+                errors.append(f"Inbound search failed: {error_msg}")
 
         if outbound_query:
             try:
@@ -567,7 +589,12 @@ async def execute_search_node(
                 else:
                     outbound_result = parsed
             except Exception as exc:
-                errors.append(f"Outbound search exception: {exc}")
+                error_msg = _unwrap_exception(exc)
+                logger.error("Outbound search failed: %s", error_msg, exc_info=True)
+                if hasattr(exc, "exceptions"):
+                    for i, sub in enumerate(exc.exceptions, 1):
+                        logger.error("  Sub-exception %d: %s", i, _unwrap_exception(sub), exc_info=sub)
+                errors.append(f"Outbound search failed: {error_msg}")
 
         # Only propagate execution_error when *both* queries failed
         both_failed = (inbound_result is None and outbound_result is None)
@@ -582,12 +609,16 @@ async def execute_search_node(
         }
 
     except Exception as exc:
-        logger.exception("Search execution failed")
+        error_msg = _unwrap_exception(exc)
+        logger.error("Search execution failed: %s", error_msg, exc_info=True)
+        if hasattr(exc, "exceptions"):
+            for i, sub in enumerate(exc.exceptions, 1):
+                logger.error("  Sub-exception %d: %s", i, _unwrap_exception(sub), exc_info=sub)
         return {
             **state,
             "inbound_result":  None,
             "outbound_result": None,
-            "execution_error": f"Search exception: {exc}",
+            "execution_error": f"Search failed: {error_msg}",
             "stage": IllumioBlockedStage.EXECUTED,
         }
 
