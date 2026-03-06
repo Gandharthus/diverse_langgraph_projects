@@ -100,6 +100,8 @@ class IllumioBlockedState(TypedDict, total=False):
     target:       Optional[str]   # hostname or app code
     target_type:  Optional[str]   # "hostname" | "app"
     direction:    Optional[str]   # "inbound" | "outbound" | "both"
+    time_from:    Optional[str]   # Elasticsearch date-math, e.g. "now-2h" (None = no filter)
+    time_to:      Optional[str]   # Elasticsearch date-math, e.g. "now"   (None = no filter)
     intent_error: Optional[str]
 
     # Queries (one or both depending on direction)
@@ -181,6 +183,8 @@ def _build_blocked_queries(
     target_type: str,
     direction: str,
     cfg: dict,
+    time_from: str | None = None,
+    time_to: str | None = None,
 ) -> tuple[dict | None, dict | None]:
     """
     Build inbound and/or outbound blocked-flow DSL queries.
@@ -195,10 +199,14 @@ def _build_blocked_queries(
     For ``target_type == "app"``:
       - inbound:  policy_decision=denied AND destination.labels.app prefix <app_prefix>
       - outbound: policy_decision=denied AND source.labels.app prefix <app_prefix>
+
+    When ``time_from`` is provided a ``range`` filter on ``@timestamp`` is
+    added to both queries (``time_to`` defaults to ``"now"``).
     """
     policy_field   = cfg.get("policy_decision_field",  "illumio.policy_decision")
     denied_value   = cfg.get("denied_value",            "denied")
     agg_size       = cfg.get("agg_size",                20)
+    timestamp_field = cfg.get("timestamp_field",        "@timestamp")
 
     src_host_field = cfg.get("source_hostname_field",  "illumio.source.hostname")
     dst_host_field = cfg.get("dest_hostname_field",    "illumio.destination.hostname")
@@ -220,13 +228,31 @@ def _build_blocked_queries(
 
     policy_filter = {"term": {policy_field: denied_value}}
 
+    # Optional date-range filter
+    time_filter: dict | None = None
+    if time_from:
+        time_filter = {
+            "range": {
+                timestamp_field: {
+                    "gte": time_from,
+                    "lte": time_to or "now",
+                }
+            }
+        }
+
+    def _base_filters(*extra) -> list:
+        filters = [policy_filter, *extra]
+        if time_filter:
+            filters.append(time_filter)
+        return filters
+
     def _inbound() -> dict:
         return {
             "size": 0,
             "track_total_hits": True,
             "query": {
                 "bool": {
-                    "filter": [policy_filter, inbound_target_filter],
+                    "filter": _base_filters(inbound_target_filter),
                 }
             },
             "aggs": {
@@ -248,7 +274,7 @@ def _build_blocked_queries(
             "track_total_hits": True,
             "query": {
                 "bool": {
-                    "filter": [policy_filter, outbound_target_filter],
+                    "filter": _base_filters(outbound_target_filter),
                 }
             },
             "aggs": {
@@ -287,17 +313,38 @@ def _bucket_lines(buckets: list[dict], label: str, indent: str = "  ") -> list[s
     return lines
 
 
+def _time_label(time_from: str | None, time_to: str | None) -> str:
+    """Return a human-readable French label for the time window."""
+    if not time_from:
+        return ""
+    _MAP = {
+        "now-1h":  "la dernière heure",
+        "now-2h":  "les 2 dernières heures",
+        "now-6h":  "les 6 dernières heures",
+        "now-12h": "les 12 dernières heures",
+        "now-24h": "les dernières 24 heures",
+        "now-1d":  "les dernières 24 heures",
+        "now-7d":  "les 7 derniers jours",
+        "now-30d": "les 30 derniers jours",
+    }
+    label = _MAP.get(time_from, f"{time_from} → {time_to or 'now'}")
+    return f" sur {label}"
+
+
 def _format_blocked_answer(
     inbound_result:  dict | None,
     outbound_result: dict | None,
     target:      str,
     target_type: str,
     direction:   str,
+    time_from:   str | None = None,
+    time_to:     str | None = None,
 ) -> str:
     """Produce the human-readable French answer from Elasticsearch responses."""
     target_label = (
         f"l'application {target}" if target_type == "app" else f"le serveur {target}"
     )
+    period = _time_label(time_from, time_to)
 
     inbound_total  = _total_hits(inbound_result)
     outbound_total = _total_hits(outbound_result)
@@ -306,17 +353,17 @@ def _format_blocked_answer(
     if total == 0:
         if direction == "inbound":
             return (
-                f"Non, aucun flux bloqué à destination de {target_label} "
-                f"n'a été détecté."
+                f"Non, aucun flux bloqué à destination de {target_label}"
+                f"{period} n'a été détecté."
             )
         if direction == "outbound":
             return (
-                f"Non, aucun flux bloqué en provenance de {target_label} "
-                f"n'a été détecté."
+                f"Non, aucun flux bloqué en provenance de {target_label}"
+                f"{period} n'a été détecté."
             )
         return (
-            f"Non, aucun flux bloqué vers ou depuis {target_label} "
-            f"n'a été détecté."
+            f"Non, aucun flux bloqué vers ou depuis {target_label}"
+            f"{period} n'a été détecté."
         )
 
     lines: list[str] = []
@@ -326,7 +373,7 @@ def _format_blocked_answer(
         aggs = inbound_result.get("aggregations", {})
         if inbound_total > 0:
             lines += [
-                f"[BLOQUES ENTRANTS] Flux bloqués vers {target_label} : "
+                f"[BLOQUES ENTRANTS] Flux bloqués vers {target_label}{period} : "
                 f"{inbound_total} flux détectés.",
                 "",
             ]
@@ -345,7 +392,7 @@ def _format_blocked_answer(
                 "Protocoles",
             )
         else:
-            lines.append(f"Aucun flux bloqué vers {target_label}.")
+            lines.append(f"Aucun flux bloqué vers {target_label}{period}.")
         lines.append("")
 
     # ── Outbound section ──
@@ -353,7 +400,7 @@ def _format_blocked_answer(
         aggs = outbound_result.get("aggregations", {})
         if outbound_total > 0:
             lines += [
-                f"[BLOQUES SORTANTS] Flux bloqués depuis {target_label} : "
+                f"[BLOQUES SORTANTS] Flux bloqués depuis {target_label}{period} : "
                 f"{outbound_total} flux détectés.",
                 "",
             ]
@@ -372,7 +419,7 @@ def _format_blocked_answer(
                 "Protocoles",
             )
         else:
-            lines.append(f"Aucun flux bloqué depuis {target_label}.")
+            lines.append(f"Aucun flux bloqué depuis {target_label}{period}.")
 
     return "\n".join(lines).strip()
 
@@ -420,11 +467,17 @@ async def parse_intent_node(
     target      = intent.get("target")
     target_type = intent.get("target_type", "hostname")
     direction   = intent.get("direction", "both")
+    time_from   = intent.get("time_from") or None
+    time_to     = intent.get("time_to") or None
 
     if target_type not in ("hostname", "app"):
         target_type = "hostname"
     if direction not in ("inbound", "outbound", "both"):
         direction = "both"
+    # Normalise: if time_from is absent, clear time_to too
+    if not time_from:
+        time_from = None
+        time_to   = None
 
     if not target:
         msg = (
@@ -437,6 +490,8 @@ async def parse_intent_node(
             "target":       None,
             "target_type":  target_type,
             "direction":    direction,
+            "time_from":    time_from,
+            "time_to":      time_to,
             "intent_error": msg,
             "stage": IllumioBlockedStage.FAILED,
             "error": None,
@@ -447,6 +502,8 @@ async def parse_intent_node(
         "target":       target,
         "target_type":  target_type,
         "direction":    direction,
+        "time_from":    time_from,
+        "time_to":      time_to,
         "intent_error": None,
         "stage": IllumioBlockedStage.INTENT_PARSED,
     }
@@ -464,10 +521,12 @@ async def build_query_node(
     target        = state.get("target", "")
     target_type   = state.get("target_type", "hostname")
     direction     = state.get("direction", "both")
+    time_from     = state.get("time_from")
+    time_to       = state.get("time_to")
     index_pattern = cfg.get("illumio_index_pattern", "your-index-*")
 
     inbound_query, outbound_query = _build_blocked_queries(
-        target, target_type, direction, cfg
+        target, target_type, direction, cfg, time_from=time_from, time_to=time_to
     )
 
     return {
@@ -586,6 +645,8 @@ async def format_answer_node(state: IllumioBlockedState) -> IllumioBlockedState:
         target=state.get("target", ""),
         target_type=state.get("target_type", "hostname"),
         direction=state.get("direction", "both"),
+        time_from=state.get("time_from"),
+        time_to=state.get("time_to"),
     )
     return {
         **state,
@@ -706,6 +767,8 @@ class IllumioBlockedResult:
     target:          str | None
     target_type:     str | None
     direction:       str | None
+    time_from:       str | None
+    time_to:         str | None
     inbound_query:   dict | None
     outbound_query:  dict | None
     index:           str | None
@@ -737,6 +800,8 @@ class IllumioBlockedResult:
             target=state.get("target"),
             target_type=state.get("target_type"),
             direction=state.get("direction"),
+            time_from=state.get("time_from"),
+            time_to=state.get("time_to"),
             inbound_query=state.get("inbound_query"),
             outbound_query=state.get("outbound_query"),
             index=state.get("index_pattern"),
@@ -750,12 +815,16 @@ class IllumioBlockedResult:
         )
 
     def summary(self) -> str:
+        time_range_str = (
+            f"{self.time_from} → {self.time_to or 'now'}" if self.time_from else "(all time)"
+        )
         lines = [
             "Illumio Blocked Flows Agent Result",
             f"  Mode:        {self.mode}",
             f"  Stage:       {self.stage.value}",
             f"  Target:      {self.target or '(none)'}  [{self.target_type or '?'}]",
             f"  Direction:   {self.direction or '(none)'}",
+            f"  Time range:  {time_range_str}",
             f"  Index:       {self.index or '(none)'}",
         ]
 
@@ -820,6 +889,8 @@ class IllumioBlockedAgent:
             "target":          None,
             "target_type":     None,
             "direction":       None,
+            "time_from":       None,
+            "time_to":         None,
             "intent_error":    None,
             "inbound_query":   None,
             "outbound_query":  None,

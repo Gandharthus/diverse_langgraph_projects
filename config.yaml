@@ -279,6 +279,9 @@ illumio_blocked_agent:
   # App prefix template ({app_code} is replaced by e.g. AP12345)
   app_prefix_format: "A_{app_code}-"
 
+  # Timestamp field used for date-range filtering
+  timestamp_field: "@timestamp"
+
   # Network fields used in aggregations
   dest_port_field:  "destination.port"
   protocol_field:   "network.protocol"
