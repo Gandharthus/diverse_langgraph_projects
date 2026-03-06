@@ -627,3 +627,33 @@ class IllumioConsumersAgent:
         logger.info("Starting Illumio Service Consumers Agent for: %s", request[:100])
         final = await self.graph.ainvoke(initial)
         return IllumioConsumersResult.from_state(final)
+
+    async def run_structured(self, app_code: str) -> IllumioConsumersResult:
+        """Called by the expert agent with pre-validated entity vars.
+
+        Skips intent parsing entirely and calls node functions directly.
+        Only ``app_code`` crosses the agent boundary.
+        """
+        logger.info(
+            "Illumio Consumers Agent (structured) app_code=%s", app_code
+        )
+        state: IllumioConsumersState = {
+            "user_request":    "",
+            "app_code":        app_code,
+            "intent_error":    None,
+            "query_json":      None,
+            "index_pattern":   None,
+            "search_result":   None,
+            "execution_error": None,
+            "answer":          None,
+            "kibana_payload":  None,
+            "stage":           IllumioConsumersStage.INTENT_PARSED,
+            "error":           None,
+        }
+        state = await build_query_node(state, self.cfg)
+        state = await execute_search_node(state, self.mcp_client)
+        if state.get("execution_error") or state.get("search_result") is None:
+            state = await kibana_fallback_node(state)
+        else:
+            state = await format_answer_node(state)
+        return IllumioConsumersResult.from_state(state)

@@ -835,3 +835,47 @@ class IllumioBlockedAgent:
         logger.info("Starting Illumio Blocked Flows Agent for: %s", request[:100])
         final = await self.graph.ainvoke(initial)
         return IllumioBlockedResult.from_state(final)
+
+    async def run_structured(
+        self,
+        target: str,
+        target_type: str = "hostname",
+        direction: str = "both",
+    ) -> IllumioBlockedResult:
+        """Called by the expert agent with pre-validated entity vars.
+
+        Skips intent parsing entirely and calls node functions directly.
+        Only ``target``, ``target_type``, and ``direction`` cross the boundary.
+        """
+        logger.info(
+            "Illumio Blocked Agent (structured) target=%s target_type=%s direction=%s",
+            target, target_type, direction,
+        )
+        state: IllumioBlockedState = {
+            "user_request":    "",
+            "target":          target,
+            "target_type":     target_type,
+            "direction":       direction,
+            "intent_error":    None,
+            "inbound_query":   None,
+            "outbound_query":  None,
+            "index_pattern":   None,
+            "inbound_result":  None,
+            "outbound_result": None,
+            "execution_error": None,
+            "answer":          None,
+            "kibana_payload":  None,
+            "stage":           IllumioBlockedStage.INTENT_PARSED,
+            "error":           None,
+        }
+        state = await build_query_node(state, self.cfg)
+        state = await execute_search_node(state, self.mcp_client)
+        if (
+            state.get("execution_error")
+            and state.get("inbound_result") is None
+            and state.get("outbound_result") is None
+        ):
+            state = await kibana_fallback_node(state)
+        else:
+            state = await format_answer_node(state)
+        return IllumioBlockedResult.from_state(state)
