@@ -4,7 +4,7 @@ Illumio Blocked Flows Agent
 
 A LangGraph-based agent that answers:
 
-  "Est-ce qu'il y a eu des flux bloqués vers ou depuis mon application/serveur ?"
+  "Est-ce qu'il y a eu des connexion bloqués vers ou depuis mon application/serveur ?"
 
 The agent:
   1. Parses the user's natural-language request to extract:
@@ -291,7 +291,7 @@ def _total_hits(result: dict | None) -> int:
 def _bucket_lines(buckets: list[dict], label: str, indent: str = "  ") -> list[str]:
     lines = [f"{label} ({len(buckets)}) :"]
     for b in buckets:
-        lines.append(f"{indent}• {b.get('key', '?')}  ({b.get('doc_count', 0)} flux)")
+        lines.append(f"{indent}• {b.get('key', '?')}  ({b.get('doc_count', 0)} connexion)")
     if not buckets:
         lines.append(f"{indent}(aucun résultat)")
     return lines
@@ -318,16 +318,16 @@ def _format_blocked_answer(
     if total == 0:
         if direction == "inbound":
             return (
-                f"Non, aucun flux bloqué à destination de {target_label} "
+                f"Non, aucun connexion bloqué à destination de {target_label} "
                 f"n'a été détecté{period_label}."
             )
         if direction == "outbound":
             return (
-                f"Non, aucun flux bloqué en provenance de {target_label} "
+                f"Non, aucun connexion bloqué en provenance de {target_label} "
                 f"n'a été détecté{period_label}."
             )
         return (
-            f"Non, aucun flux bloqué vers ou depuis {target_label} "
+            f"Non, aucun connexion bloqué vers ou depuis {target_label} "
             f"n'a été détecté{period_label}."
         )
 
@@ -340,8 +340,8 @@ def _format_blocked_answer(
         aggs = inbound_result.get("aggregations", {})
         if inbound_total > 0:
             lines += [
-                f"[BLOQUES ENTRANTS] Flux bloqués vers {target_label} : "
-                f"{inbound_total} flux détectés.",
+                f"[BLOQUES ENTRANTS] Connexion bloqués vers {target_label} : "
+                f"{inbound_total} connexion détectés.",
                 "",
             ]
             lines += _bucket_lines(
@@ -359,7 +359,7 @@ def _format_blocked_answer(
                 "Protocoles",
             )
         else:
-            lines.append(f"Aucun flux bloqué vers {target_label}.")
+            lines.append(f"Aucun connexion bloqué vers {target_label}.")
         lines.append("")
 
     # ── Outbound section ──
@@ -367,8 +367,8 @@ def _format_blocked_answer(
         aggs = outbound_result.get("aggregations", {})
         if outbound_total > 0:
             lines += [
-                f"[BLOQUES SORTANTS] Flux bloqués depuis {target_label} : "
-                f"{outbound_total} flux détectés.",
+                f"[BLOQUES SORTANTS] Connexion bloqués depuis {target_label} : "
+                f"{outbound_total} connexion détectés.",
                 "",
             ]
             lines += _bucket_lines(
@@ -386,7 +386,7 @@ def _format_blocked_answer(
                 "Protocoles",
             )
         else:
-            lines.append(f"Aucun flux bloqué depuis {target_label}.")
+            lines.append(f"Aucun connexion bloqué depuis {target_label}.")
 
     return "\n".join(lines).strip()
 
@@ -828,14 +828,14 @@ class IllumioBlockedAgent:
 
         agent = IllumioBlockedAgent(mcp_client=MCP_CLIENT, chatmodel=chatmodel)
         result = await agent.run(
-            "Est-ce qu'il y a eu des flux bloqués vers ou depuis le serveur web-prod-01 ?"
+            "Est-ce qu'il y a eu des connexion bloqués vers ou depuis le serveur web-prod-01 ?"
         )
         print(result.summary())
 
     Also works for application codes::
 
         result = await agent.run(
-            "Y a-t-il des flux bloqués vers l'application AP12345 ?"
+            "Y a-t-il des connexion bloqués vers l'application AP12345 ?"
         )
     """
 

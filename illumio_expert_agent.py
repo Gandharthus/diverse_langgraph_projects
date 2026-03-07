@@ -588,7 +588,7 @@ class IllumioExpertAgent:
             "Est-ce que j'ai du trafic dev→prod pour AP12345 ?", history
         )
         history, answer = await agent.chat_with_history(
-            "Et les flux bloqués pour la même application ?", history
+            "Et les connexion bloqués pour la même application ?", history
         )
     """
 
