@@ -251,7 +251,7 @@ def _format_answer(
 
     if total_val == 0:
         return (
-            f"Non, aucun flux de trafic n'a été détecté circulant de "
+            f"Non, aucun connexion de trafic n'a été détecté circulant de "
             f"{dir_label} pour l'application {app_code}{period_label}."
         )
 
@@ -262,14 +262,14 @@ def _format_answer(
         f"Oui, du trafic a été détecté entre {dir_label} pour l'application "
         f"{app_code}{period_label}.",
         "",
-        f"Nombre total de flux détectés : {total_val}",
+        f"Nombre total de connexion détectés : {total_val}",
         "",
         f"Applications sources ({src_label}) identifiées ({len(buckets)}) :",
     ]
     for b in buckets:
         key   = b.get("key", "?")
         count = b.get("doc_count", 0)
-        lines.append(f"  • {key}  ({count} flux)")
+        lines.append(f"  • {key}  ({count} connexion)")
 
     if not buckets:
         lines.append("  (aucune application source identifiée dans les agrégations)")

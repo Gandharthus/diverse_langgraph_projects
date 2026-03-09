@@ -273,7 +273,7 @@ def _format_consumers_answer(
         src_desc = f"l'application {src_env_str} {app_code}" if src_env_str else f"l'application {app_code}"
         dst_desc = f"applications de {dst_env_str}" if dst_env_str else "applications"
         header   = f"Applications de type « {dst_desc} » appelées par {src_desc} :"
-        no_flow  = f"Aucun flux autorisé depuis {src_desc} vers des {dst_desc} n'a été détecté."
+        no_flow  = f"Aucun connexion autorisé depuis {src_desc} vers des {dst_desc} n'a été détecté."
         agg_key  = "top_callees"
         agg_label = f"Applications appelées identifiées"
         empty_label = "aucune application de destination identifiée dans les agrégations"
@@ -283,7 +283,7 @@ def _format_consumers_answer(
         svc_desc = f"le service {dst_env_str} {app_code}" if dst_env_str else f"le service {app_code}"
         src_desc = f"applications de {src_env_str}" if src_env_str else "applications"
         header   = f"Applications consommatrices du service {app_code} :"
-        no_flow  = f"Aucun flux autorisé à destination de {svc_desc} n'a été détecté. Aucune application consommatrice identifiée."
+        no_flow  = f"Aucun connexion autorisé à destination de {svc_desc} n'a été détecté. Aucune application consommatrice identifiée."
         agg_key  = "top_consumers"
         agg_label = f"Applications consommatrices identifiées"
         empty_label = "aucune application source identifiée dans les agrégations"
@@ -297,14 +297,14 @@ def _format_consumers_answer(
     lines = [
         header,
         "",
-        f"Nombre total de flux autorisés détectés : {total_val}",
+        f"Nombre total de connexion autorisés détectés : {total_val}",
         "",
         f"{agg_label} ({len(buckets)}) :",
     ]
     for b in buckets:
         key   = b.get("key", "?")
         count = b.get("doc_count", 0)
-        lines.append(f"  • {key}  ({count} flux)")
+        lines.append(f"  • {key}  ({count} connexion)")
 
     if not buckets:
         lines.append(f"  ({empty_label})")

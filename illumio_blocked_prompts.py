@@ -62,13 +62,13 @@ def format_kibana_blocked_payload(
     parts = []
     if inbound_query:
         parts.append(
-            f"# --- Flux BLOQUES vers la cible (inbound) ---\n"
+            f"# --- Connexion BLOQUES vers la cible (inbound) ---\n"
             f"GET {index_pattern}/_search\n"
             f"{json.dumps(inbound_query, indent=2, ensure_ascii=False)}"
         )
     if outbound_query:
         parts.append(
-            f"# --- Flux BLOQUES depuis la cible (outbound) ---\n"
+            f"# --- Connexion BLOQUES depuis la cible (outbound) ---\n"
             f"GET {index_pattern}/_search\n"
             f"{json.dumps(outbound_query, indent=2, ensure_ascii=False)}"
         )

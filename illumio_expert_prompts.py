@@ -48,12 +48,12 @@ context, e.g. follow-up questions) and return a JSON object with THREE fields:
 
    "traffic"   – The user asks about traffic flowing between environments
                  (dev↔prod, production↔development cross-environment flows).
-                 Keywords: traffic, flux, circulation, dev/prod, prod/dev,
+                 Keywords: traffic, connexion, circulation, dev/prod, prod/dev,
                  cross-environment, entre environnements, dev to prod, prod to dev.
 
    "blocked"   – The user asks about blocked / denied flows to or from a server
                  or application.
-                 Keywords: bloqué, denied, blocked, flux bloqués, policy denied,
+                 Keywords: bloqué, denied, blocked, connexion bloqués, policy denied,
                  accès refusé, rejeté.
 
    "consumers" – The user asks which applications consume / connect to a service.
