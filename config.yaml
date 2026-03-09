@@ -253,6 +253,9 @@ illumio_agent:
   # Maximum number of source-application buckets returned by the aggregation
   agg_size: 50
 
+  # Timestamp field used for date-range filtering
+  timestamp_field: "@timestamp"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Illumio Blocked Flows Agent – Configuration
@@ -286,6 +289,9 @@ illumio_blocked_agent:
   # Maximum number of buckets returned per aggregation
   agg_size: 20
 
+  # Timestamp field used for date-range filtering
+  timestamp_field: "@timestamp"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Illumio Service Consumers Agent – Configuration
@@ -300,6 +306,12 @@ illumio_consumers_agent:
   # App label fields
   source_app_field: "illumio.source.labels.app"
   dest_app_field:   "illumio.destination.labels.app"
+
+  # Environment label fields and values (for env-based filtering)
+  source_env_field: "illumio.source.labels.env"
+  dest_env_field:   "illumio.destination.labels.env"
+  dev_env_value:    "E_DEV"
+  prod_env_value:   "E_PROD"
 
   # Policy decision field and allowed value
   # Note: uses top-level "policy_decision" (not prefixed with "illumio.")

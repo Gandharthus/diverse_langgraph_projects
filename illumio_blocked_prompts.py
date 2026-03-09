@@ -14,7 +14,7 @@ ILLUMIO_BLOCKED_INTENT_SYSTEM_PROMPT = """\
 You are an Illumio network security analyst at BNP Paribas.
 Your task is to extract information from the user's question about BLOCKED network traffic flows.
 
-Extract the following three values:
+Extract the following four values:
 
 1. target – The exact hostname or application code the user is asking about.
    - Hostnames look like: "server01", "web-prod-01", "10.0.0.1"
@@ -33,8 +33,19 @@ Extract the following three values:
    - "both"     – both inbound AND outbound (use when the user says "vers ou depuis",
                    or does not specify a direction – this is the default)
 
+4. date_range – The time window to restrict the search to, expressed as an
+   Elasticsearch relative date-math string from "now":
+   • "now-1h"   – last hour
+   • "now-24h"  – last 24 hours
+   • "now-7d"   – last 7 days
+   • "now-30d"  – last 30 days
+   • "now-1M"   – last month (~30 days)
+   • "now-3M"   – last 3 months
+   • "now-1y"   – last year
+   If the user does not mention a time period, return null (no time filter applied).
+
 Return ONLY a valid JSON object – no prose, no markdown code fences:
-{"target": "web-prod-01", "target_type": "hostname", "direction": "both"}
+{"target": "web-prod-01", "target_type": "hostname", "direction": "both", "date_range": null}
 """
 
 
@@ -51,13 +62,13 @@ def format_kibana_blocked_payload(
     parts = []
     if inbound_query:
         parts.append(
-            f"# --- Flux BLOQUES vers la cible (inbound) ---\n"
+            f"# --- Connexion BLOQUES vers la cible (inbound) ---\n"
             f"GET {index_pattern}/_search\n"
             f"{json.dumps(inbound_query, indent=2, ensure_ascii=False)}"
         )
     if outbound_query:
         parts.append(
-            f"# --- Flux BLOQUES depuis la cible (outbound) ---\n"
+            f"# --- Connexion BLOQUES depuis la cible (outbound) ---\n"
             f"GET {index_pattern}/_search\n"
             f"{json.dumps(outbound_query, indent=2, ensure_ascii=False)}"
         )

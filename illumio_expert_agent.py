@@ -1,29 +1,5 @@
 """
 Illumio Expert Agent
-====================
-
-A LangGraph-based orchestrator that routes every Illumio-related natural-
-language question to the most appropriate specialist sub-agent:
-
-  ┌─────────────────────────────────────────────────────────────────┐
-  │              Illumio Expert Agent  (this file)                  │
-  │                                                                 │
-  │  parse_intent (LLM)                                             │
-  │       │                                                         │
-  │       ├─ traffic_analysis  → IllumioTrafficAgent                │
-  │       ├─ blocked_flows     → IllumioBlockedAgent                │
-  │       ├─ consumers         → IllumioConsumersAgent              │
-  │       └─ query_builder     → IllumioQueryBuilderSubAgent ◄─────── NEW
-  └─────────────────────────────────────────────────────────────────┘
-
-The QueryBuilder integration uses the sub-agent's ``describe_skills()``
-interface to dynamically populate the expert's intent-classification prompt,
-keeping both agents in sync without manual maintenance.
-
-Module layout
--------------
-- **config.yaml**               – shared config (no dedicated section needed)
-- **illumio_expert_prompts.py** – ``build_expert_intent_prompt(qb_skill)``
 - **illumio_expert_agent.py**   – state, nodes, graph, orchestrator  ← this file
 - **illumio_expert_graph.py**   – thin entry-point for ``langgraph dev``
 """

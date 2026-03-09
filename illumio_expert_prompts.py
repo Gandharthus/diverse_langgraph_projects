@@ -1,6 +1,5 @@
 """
 Illumio Expert Agent – Prompt Templates
-========================================
 
 The intent system prompt is built **dynamically** from the QueryBuilder
 sub-agent's ``describe_skills()`` output, so the expert's knowledge of that

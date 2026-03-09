@@ -1,24 +1,5 @@
 """
 LangGraph Dev Server Entry Point – Illumio Expert Agent
-=======================================================
-
-This module exposes the compiled ``graph`` object that ``langgraph dev``
-expects for the Illumio Expert Agent.
-
-The ``langgraph.json`` config references this file as:
-
-    "graphs": { ..., "illumio_expert": "./illumio_expert_graph.py:graph" }
-
-The expert agent is a routing orchestrator.  It wires together four
-specialist sub-agents:
-
-  • IllumioTrafficAgent           – cross-environment traffic analysis
-  • IllumioBlockedAgent           – blocked/denied flow analysis
-  • IllumioConsumersAgent         – service-consumer identification
-  • IllumioQueryBuilderSubAgent   – deterministic structured ES queries  ← NEW
-
-The QueryBuilder sub-agent's ``describe_skills()`` output is used to
-auto-populate the expert's intent-classification prompt.
 """
 
 from __future__ import annotations
