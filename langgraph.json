@@ -6,7 +6,8 @@
     "illumio_agent": "./illumio_graph.py:graph",
     "illumio_blocked_agent": "./illumio_blocked_graph.py:graph",
     "illumio_consumers_agent": "./illumio_consumers_graph.py:graph",
-    "illumio_query_builder": "./illumio_query_builder_graph.py:graph"
+    "illumio_query_builder": "./illumio_query_builder_graph.py:graph",
+    "illumio_expert": "./illumio_expert_graph.py:graph"
   },
   "env": ".env",
   "python_version": "3.11",
