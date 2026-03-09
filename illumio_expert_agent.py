@@ -222,11 +222,17 @@ async def answer_traffic_node(
     result = await traffic_agent.run(state.get("user_request", ""))
 
     if result.mode == "failed":
+        # Surface the sub-agent's clarification message (e.g. "missing AP code")
+        # rather than silently swallowing it with answer=None.
+        clarification = (
+            "; ".join(result.errors)
+            if result.errors
+            else "L'agent d'analyse de trafic n'a pas pu traiter la demande."
+        )
         return {
             **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "Traffic agent failed.",
+            "answer": clarification,
+            "stage":  IllumioExpertStage.ANSWERED,
         }
 
     answer = result.answer or result.kibana_payload or result.summary()
@@ -251,11 +257,17 @@ async def answer_blocked_node(
     result = await blocked_agent.run(state.get("user_request", ""))
 
     if result.mode == "failed":
+        # Surface the sub-agent's clarification message (e.g. "missing AP code /
+        # hostname") rather than silently swallowing it with answer=None.
+        clarification = (
+            "; ".join(result.errors)
+            if result.errors
+            else "L'agent d'analyse des flux bloqués n'a pas pu traiter la demande."
+        )
         return {
             **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "Blocked-flows agent failed.",
+            "answer": clarification,
+            "stage":  IllumioExpertStage.ANSWERED,
         }
 
     answer = result.answer or result.kibana_payload or result.summary()
@@ -280,11 +292,17 @@ async def answer_consumers_node(
     result = await consumers_agent.run(state.get("user_request", ""))
 
     if result.mode == "failed":
+        # Surface the sub-agent's clarification message (e.g. "missing AP code")
+        # rather than silently swallowing it with answer=None.
+        clarification = (
+            "; ".join(result.errors)
+            if result.errors
+            else "L'agent d'identification des consommateurs n'a pas pu traiter la demande."
+        )
         return {
             **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "Consumers agent failed.",
+            "answer": clarification,
+            "stage":  IllumioExpertStage.ANSWERED,
         }
 
     answer = result.answer or result.kibana_payload or result.summary()
@@ -311,12 +329,41 @@ async def answer_query_builder_node(
     The sub-agent's ``describe_skills()`` interface was already consulted
     at construction time to build the intent-classification prompt, ensuring
     the expert knows exactly what parameters to extract.
+
+    Guards
+    ------
+    If the LLM extracted neither ``source_app`` nor ``destination_app`` from
+    the user's question (e.g. the user wrote "mon application" without giving
+    an AP code), we return a clarification request immediately — before calling
+    the sub-agent — so the user gets a helpful message rather than a silent
+    validation failure.
     """
     logger.info("Node: answer_query_builder (expert)")
 
+    source_app      = state.get("qb_source_app")
+    destination_app = state.get("qb_destination_app")
+
+    # ── Guard: at least one app selector is mandatory ────────────────────────
+    if not source_app and not destination_app:
+        return {
+            **state,
+            "answer": (
+                "Pour exécuter une requête structurée, veuillez préciser "
+                "l'application source ou destination.\n\n"
+                "Exemples :\n"
+                "  • source_app      : préfixe de l'app source "
+                "(ex. : « A_AP12345- »)\n"
+                "  • destination_app : préfixe de l'app destination "
+                "(ex. : « A_AP67890- »)\n\n"
+                "Vous pouvez également indiquer le code AP et je formate "
+                "le préfixe pour vous."
+            ),
+            "stage": IllumioExpertStage.ANSWERED,
+        }
+
     result = await qb_sub_agent.run(
-        source_app=state.get("qb_source_app"),
-        destination_app=state.get("qb_destination_app"),
+        source_app=source_app,
+        destination_app=destination_app,
         policy_decision=state.get("qb_policy_decision"),
         time_range=state.get("qb_time_range"),
         env=state.get("qb_env"),
@@ -324,11 +371,17 @@ async def answer_query_builder_node(
     )
 
     if result.mode == "failed":
+        # Surface the sub-agent's validation error as a clarification message
+        # rather than silently swallowing it with answer=None.
+        clarification = (
+            "; ".join(result.errors)
+            if result.errors
+            else "Le QueryBuilder n'a pas pu traiter la demande."
+        )
         return {
             **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "QueryBuilder sub-agent failed.",
+            "answer": clarification,
+            "stage":  IllumioExpertStage.ANSWERED,
         }
 
     return {
