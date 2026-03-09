@@ -311,3 +311,34 @@ illumio_consumers_agent:
 
   # Maximum number of consumer application buckets returned by the aggregation
   agg_size: 20
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Illumio Query Builder Sub-Agent – Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# Settings for the deterministic ES query builder sub-agent.
+# All field names and env values are read from here so they can be adjusted
+# without touching any Python code.
+
+illumio_query_builder:
+  # Elasticsearch index pattern for Illumio flow logs
+  illumio_index_pattern: "your-index-*"
+
+  # Timestamp field used for the time_range filter
+  timestamp_field: "@timestamp"
+
+  # Policy decision field (term filter)
+  policy_decision_field: "illumio.policy_decision"
+
+  # App label fields (prefix filters)
+  source_app_field: "illumio.source.labels.app"
+  dest_app_field:   "illumio.destination.labels.app"
+
+  # Environment label fields
+  # Used when env = E_PROD (term filter) or env = HPROD (must_not term = E_PROD)
+  source_env_field: "illumio.source.labels.env"
+  dest_env_field:   "illumio.destination.labels.env"
+
+  # The literal E_PROD value.  HPROD is never stored literally – it translates
+  # to must_not term <env_field> = prod_env_value.
+  prod_env_value: "E_PROD"
