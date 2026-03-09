@@ -1,5 +1,27 @@
 """
-Illumio Expert Agent
+Illumio Expert Domain Agent
+============================
+
+A conversational LangGraph agent that is the single entry point for all
+Illumio-related questions at BNP Paribas.
+
+It classifies the user's intent from the conversation and delegates to
+specialised sub-agents when a live Elasticsearch query is required:
+
+  - IllumioTrafficAgent    → cross-environment traffic (dev↔prod)
+  - IllumioBlockedAgent    → blocked / denied flow analysis
+  - IllumioConsumersAgent  → service consumer discovery
+
+For general Illumio knowledge questions (concepts, labels, policies, …) it
+answers directly from its built-in domain expertise without querying ES.
+
+Conversation is multi-turn: the full message history is carried in the
+``messages`` field using the LangGraph ``add_messages`` reducer, which means
+the LangGraph API server can checkpoint and restore threads transparently.
+
+Module layout
+-------------
+- **illumio_expert_prompts.py** – LLM prompt templates
 - **illumio_expert_agent.py**   – state, nodes, graph, orchestrator  ← this file
 - **illumio_expert_graph.py**   – thin entry-point for ``langgraph dev``
 """
@@ -8,23 +30,23 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
-from typing import Any, Literal, Optional, TypedDict
+from typing import Annotated, Any, Optional, TypedDict
 
-import yaml
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
 
-from illumio_agent           import IllumioTrafficAgent
-from illumio_blocked_agent   import IllumioBlockedAgent
+from illumio_agent import IllumioTrafficAgent
+from illumio_blocked_agent import IllumioBlockedAgent
 from illumio_consumers_agent import IllumioConsumersAgent
-from illumio_query_builder_agent import IllumioQueryBuilderSubAgent
-from illumio_expert_prompts  import build_expert_intent_prompt, format_unknown_answer
+from illumio_expert_prompts import (
+    ILLUMIO_EXPERT_INTENT_SYSTEM_PROMPT,
+    ILLUMIO_EXPERT_LANGUAGE_ADAPT_PROMPT,
+    ILLUMIO_EXPERT_NATURAL_RESPONSE_PROMPT,
+    ILLUMIO_EXPERT_SYSTEM_PROMPT,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -32,76 +54,42 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Configuration  (reuses the shared config.yaml)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _load_config(config_path: str | Path | None = None) -> dict[str, Any]:
-    if config_path is None:
-        config_path = os.getenv(
-            "PIPELINE_WIZARD_CONFIG",
-            Path(__file__).parent / "config.yaml",
-        )
-    config_path = Path(config_path)
-    if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    with open(config_path, "r") as fh:
-        return yaml.safe_load(fh)
-
-
-_CFG = _load_config()
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Valid intents
-# ─────────────────────────────────────────────────────────────────────────────
-
-_VALID_INTENTS = frozenset(
-    {"traffic_analysis", "blocked_flows", "consumers", "query_builder", "unknown"}
-)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Stage
-# ─────────────────────────────────────────────────────────────────────────────
-
-class IllumioExpertStage(str, Enum):
-    """Tracks the current logical stage of the expert-agent workflow."""
-    INIT          = "init"
-    INTENT_PARSED = "intent_parsed"
-    ANSWERED      = "answered"
-    UNKNOWN       = "unknown"
-    FAILED        = "failed"
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # State
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IllumioExpertState(TypedDict, total=False):
-    """State passed between LangGraph nodes."""
+    """State for the conversational Illumio expert agent.
 
-    # ── Input ─────────────────────────────────────────────────────────────────
-    user_request: str
+    ``messages`` uses the ``add_messages`` reducer so that LangGraph appends
+    new messages rather than replacing the list on each graph invocation.
+    This enables transparent multi-turn conversation via the LangGraph API.
+    """
 
-    # ── Intent classification ─────────────────────────────────────────────────
-    intent:        Optional[str]   # one of _VALID_INTENTS
-    intent_error:  Optional[str]
-    unknown_reason: Optional[str]
+    # Conversation history (human + AI turns)
+    messages: Annotated[list[BaseMessage], add_messages]
 
-    # ── QueryBuilder extracted params (populated only for "query_builder") ────
-    qb_source_app:      Optional[str]
-    qb_destination_app: Optional[str]
-    qb_policy_decision: Optional[str]
-    qb_time_range:      Optional[dict]
-    qb_env:             Optional[str]
-    qb_aggs:            Optional[dict]
+    # Intermediate classification result
+    intent: Optional[str]  # "traffic" | "blocked" | "consumers" | "general"
 
-    # ── Delegated result ──────────────────────────────────────────────────────
-    answer:         Optional[str]
-    kibana_payload: Optional[str]
+    # Answer produced by the chosen sub-agent or direct LLM response
+    subagent_answer: Optional[str]
 
-    # ── Control flow ──────────────────────────────────────────────────────────
-    stage: IllumioExpertStage
+    # Error from classification (non-fatal – falls back to "general")
     error: Optional[str]
+
+    # Error from the most recent sub-agent call (None when successful).
+    # Set to a human-readable description whenever a sub-agent falls back to
+    # Kibana or fails entirely, e.g.:
+    #   "Elasticsearch MCP unavailable: <reason>. Kibana fallback provided."
+    call_error: Optional[str]
+
+    # Persistent entities extracted from the conversation.
+    # Once set, these are retained across turns so sub-agents always have
+    # enough context even when the user omits them in follow-up messages.
+    ap_code:  Optional[str]   # e.g. "AP12345"
+    hostname: Optional[str]   # e.g. "srv-prod-db01"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -137,238 +125,381 @@ def _extract_json(text: str) -> dict | None:
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Node: Parse intent  (LLM)
-# ─────────────────────────────────────────────────────────────────────────────
+def _last_human_message(messages: list[BaseMessage]) -> str:
+    """Return the text of the most recent HumanMessage."""
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            content = msg.content
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return " ".join(
+                    b.get("text", "") for b in content if isinstance(b, dict)
+                )
+    return ""
 
-async def parse_intent_node(
-    state: IllumioExpertState,
+
+def _format_conversation_context(messages: list[BaseMessage], max_turns: int = 6) -> str:
+    """Format the recent conversation history as a plain-text string for the LLM."""
+    recent = messages[-max_turns:] if len(messages) > max_turns else messages
+    lines: list[str] = []
+    for msg in recent:
+        role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+def _enrich_request(user_request: str, ap_code: str | None, hostname: str | None) -> str:
+    """Prepend known context entities so sub-agents don't need to re-extract them.
+
+    This lets the user say "and what about the blocked flows?" in a follow-up
+    without repeating the AP code or hostname — the expert agent remembers them.
+    """
+    extras: list[str] = []
+    if ap_code:
+        extras.append(f"AP code: {ap_code}")
+    if hostname:
+        extras.append(f"Hostname: {hostname}")
+    if extras:
+        context_line = "[Known context — " + ", ".join(extras) + "]"
+        return f"{context_line}\n\n{user_request}"
+    return user_request
+
+
+_INTENT_DESCRIPTIONS: dict[str, str] = {
+    "traffic":   "cross-environment traffic analysis (dev ↔ prod flows)",
+    "blocked":   "blocked / denied flow analysis",
+    "consumers": "service consumer discovery (which apps connect to a service)",
+}
+
+
+async def _naturalize_fallback(
     chatmodel: ChatOpenAI,
-    system_prompt: str,
-) -> IllumioExpertState:
+    conversation_context: str,
+    intent: str,
+    mode: str,  # "kibana_fallback" | "failed"
+    errors: list[str],
+    kibana_payload: str | None,
+) -> str:
+    """Ask the LLM to produce a natural, language-aware response for fallback/error cases.
+
+    For *kibana_fallback*: the LLM wraps the Kibana query in a friendly message.
+    For *failed*: the LLM figures out what info is missing and asks for it naturally.
     """
-    Use the LLM to classify the user's intent and extract QB params when needed.
+    intent_desc = _INTENT_DESCRIPTIONS.get(intent, intent)
 
-    The *system_prompt* is built once at agent construction time from the
-    QueryBuilder sub-agent's ``describe_skills()`` output, so it always
-    reflects the sub-agent's actual parameter interface.
-    """
-    logger.info("Node: parse_intent (expert)")
-    user_request = state.get("user_request", "")
+    if mode == "kibana_fallback" and kibana_payload:
+        situation = "Direct Elasticsearch access is unavailable."
+        extra = (
+            "You have a Kibana Dev Tools query that the user can run manually to get "
+            "the data they need. Present it as a useful next step:\n\n"
+            f"```\n{kibana_payload}\n```"
+        )
+    else:
+        error_str = "; ".join(errors) if errors else "Unknown error."
+        situation = f"The query could not be completed. Technical reason: {error_str}"
+        extra = (
+            "If the failure is because the user did not provide a required identifier "
+            "(such as an AP code, a hostname, or an application name), ask for it "
+            "naturally and positively — do NOT apologise excessively. "
+            "Otherwise, briefly explain the issue and suggest what the user can do next."
+        )
 
-    if not user_request.strip():
-        return {
-            **state,
-            "intent":       "unknown",
-            "intent_error": "Empty request.",
-            "stage": IllumioExpertStage.FAILED,
-            "error": "Empty user request.",
-        }
-
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_request),
-    ]
-    response: AIMessage = await chatmodel.ainvoke(messages)
-    parsed = _extract_json(response.content)
-
-    if parsed is None:
-        return {
-            **state,
-            "intent":       None,
-            "intent_error": "Could not parse intent from LLM output.",
-            "stage": IllumioExpertStage.FAILED,
-            "error": "Intent parsing failed – LLM returned non-JSON output.",
-        }
-
-    intent = parsed.get("intent", "unknown")
-    if intent not in _VALID_INTENTS:
-        intent = "unknown"
-
-    base = {
-        **state,
-        "intent":        intent,
-        "intent_error":  None,
-        "unknown_reason": parsed.get("reason"),
-        "stage": IllumioExpertStage.INTENT_PARSED,
-    }
-
-    # ── Extract QB params when routed to the query builder ───────────────────
-    if intent == "query_builder":
-        qb = parsed.get("qb_params", {}) or {}
-        return {
-            **base,
-            "qb_source_app":      qb.get("source_app"),
-            "qb_destination_app": qb.get("destination_app"),
-            "qb_policy_decision": qb.get("policy_decision"),
-            "qb_time_range":      qb.get("time_range"),
-            "qb_env":             qb.get("env"),
-            "qb_aggs":            qb.get("aggs"),
-        }
-
-    return base
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Node: Delegate → IllumioTrafficAgent
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def answer_traffic_node(
-    state: IllumioExpertState,
-    traffic_agent: IllumioTrafficAgent,
-) -> IllumioExpertState:
-    """Delegate to the cross-environment traffic analysis specialist."""
-    logger.info("Node: answer_traffic (expert)")
-    result = await traffic_agent.run(state.get("user_request", ""))
-
-    if result.mode == "failed":
-        return {
-            **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "Traffic agent failed.",
-        }
-
-    answer = result.answer or result.kibana_payload or result.summary()
-    return {
-        **state,
-        "answer":         answer,
-        "kibana_payload": result.kibana_payload,
-        "stage": IllumioExpertStage.ANSWERED,
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Node: Delegate → IllumioBlockedAgent
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def answer_blocked_node(
-    state: IllumioExpertState,
-    blocked_agent: IllumioBlockedAgent,
-) -> IllumioExpertState:
-    """Delegate to the blocked-flows analysis specialist."""
-    logger.info("Node: answer_blocked (expert)")
-    result = await blocked_agent.run(state.get("user_request", ""))
-
-    if result.mode == "failed":
-        return {
-            **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "Blocked-flows agent failed.",
-        }
-
-    answer = result.answer or result.kibana_payload or result.summary()
-    return {
-        **state,
-        "answer":         answer,
-        "kibana_payload": result.kibana_payload,
-        "stage": IllumioExpertStage.ANSWERED,
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Node: Delegate → IllumioConsumersAgent
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def answer_consumers_node(
-    state: IllumioExpertState,
-    consumers_agent: IllumioConsumersAgent,
-) -> IllumioExpertState:
-    """Delegate to the service-consumers analysis specialist."""
-    logger.info("Node: answer_consumers (expert)")
-    result = await consumers_agent.run(state.get("user_request", ""))
-
-    if result.mode == "failed":
-        return {
-            **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "Consumers agent failed.",
-        }
-
-    answer = result.answer or result.kibana_payload or result.summary()
-    return {
-        **state,
-        "answer":         answer,
-        "kibana_payload": result.kibana_payload,
-        "stage": IllumioExpertStage.ANSWERED,
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Node: Delegate → IllumioQueryBuilderSubAgent
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def answer_query_builder_node(
-    state: IllumioExpertState,
-    qb_sub_agent: IllumioQueryBuilderSubAgent,
-) -> IllumioExpertState:
-    """
-    Delegate to the QueryBuilder sub-agent using the structured params
-    extracted by ``parse_intent_node``.
-
-    The sub-agent's ``describe_skills()`` interface was already consulted
-    at construction time to build the intent-classification prompt, ensuring
-    the expert knows exactly what parameters to extract.
-    """
-    logger.info("Node: answer_query_builder (expert)")
-
-    result = await qb_sub_agent.run(
-        source_app=state.get("qb_source_app"),
-        destination_app=state.get("qb_destination_app"),
-        policy_decision=state.get("qb_policy_decision"),
-        time_range=state.get("qb_time_range"),
-        env=state.get("qb_env"),
-        aggs=state.get("qb_aggs"),
+    prompt = ILLUMIO_EXPERT_NATURAL_RESPONSE_PROMPT.format(
+        intent_description=intent_desc,
+        conversation_context=conversation_context,
+        situation_description=situation,
+        extra_context=extra,
     )
 
-    if result.mode == "failed":
+    response: AIMessage = await chatmodel.ainvoke([SystemMessage(content=prompt)])
+    return response.content
+
+
+async def _adapt_language(
+    chatmodel: ChatOpenAI,
+    conversation_context: str,
+    subagent_answer: str,
+) -> str:
+    """Rewrite a sub-agent answer in the user's language (detected from conversation)."""
+    prompt = ILLUMIO_EXPERT_LANGUAGE_ADAPT_PROMPT.format(
+        subagent_answer=subagent_answer,
+        conversation_context=conversation_context,
+    )
+    response: AIMessage = await chatmodel.ainvoke([SystemMessage(content=prompt)])
+    return response.content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node: Classify intent
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def classify_intent_node(
+    state: IllumioExpertState, chatmodel: ChatOpenAI
+) -> IllumioExpertState:
+    """Use the LLM to classify the user's intent from the latest message."""
+    logger.info("Node: classify_intent")
+    messages = state.get("messages", [])
+    user_request = _last_human_message(messages)
+
+    if not user_request.strip():
+        return {**state, "intent": "general", "error": None}
+
+    # Include recent conversation so the classifier handles follow-up questions
+    context = _format_conversation_context(messages)
+    classification_input = (
+        f"Conversation so far:\n{context}\n\n"
+        "Classify the intent of the latest User message."
+    )
+
+    llm_messages = [
+        SystemMessage(content=ILLUMIO_EXPERT_INTENT_SYSTEM_PROMPT),
+        HumanMessage(content=classification_input),
+    ]
+    try:
+        response: AIMessage = await chatmodel.ainvoke(llm_messages)
+        result = _extract_json(response.content)
+    except Exception as exc:
+        logger.exception("classify_intent LLM call failed")
+        return {**state, "intent": "general", "error": f"Intent classification failed: {exc}"}
+
+    intent = "general"  # safe default
+    if result and isinstance(result.get("intent"), str):
+        raw = result["intent"]
+        if raw in ("traffic", "blocked", "consumers", "general"):
+            intent = raw
+
+    # Extract entities – only overwrite existing state values when the LLM
+    # found something new in the current message (non-null, non-empty string).
+    ap_code  = state.get("ap_code")
+    hostname = state.get("hostname")
+
+    if result:
+        new_ap  = result.get("ap_code")
+        new_host = result.get("hostname")
+        if isinstance(new_ap, str) and new_ap.strip():
+            ap_code = new_ap.strip()
+        if isinstance(new_host, str) and new_host.strip():
+            hostname = new_host.strip()
+
+    logger.info("Classified intent: %s | ap_code=%s | hostname=%s", intent, ap_code, hostname)
+    return {**state, "intent": intent, "error": None, "ap_code": ap_code, "hostname": hostname}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Nodes: Sub-agent invocations
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def invoke_traffic_agent_node(
+    state: IllumioExpertState,
+    traffic_agent: IllumioTrafficAgent,
+    chatmodel: ChatOpenAI,
+) -> IllumioExpertState:
+    """Delegate to the IllumioTrafficAgent sub-agent."""
+    logger.info("Node: invoke_traffic_agent")
+    messages = state.get("messages", [])
+    user_request = _last_human_message(messages)
+    context = _format_conversation_context(messages)
+    enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
+
+    try:
+        result = await traffic_agent.run(enriched)
+    except Exception as exc:
+        logger.exception("Traffic agent run raised an unexpected exception")
+        call_error = f"Traffic agent crashed unexpectedly: {exc}"
         return {
             **state,
-            "answer": None,
-            "stage": IllumioExpertStage.FAILED,
-            "error": "; ".join(result.errors) if result.errors else "QueryBuilder sub-agent failed.",
+            "subagent_answer": await _naturalize_fallback(
+                chatmodel, context, "traffic", "failed", [call_error], None
+            ),
+            "call_error": call_error,
         }
 
-    return {
-        **state,
-        "answer":         result.summary(),
-        "kibana_payload": result.kibana_payload,
-        "stage": IllumioExpertStage.ANSWERED,
-    }
+    call_error: str | None = None
+    if result.mode == "answered" and result.answer:
+        answer = await _adapt_language(chatmodel, context, result.answer)
+    elif result.mode == "kibana_fallback" and result.kibana_payload:
+        error_detail = (": " + "; ".join(result.errors)) if result.errors else ""
+        call_error = (
+            f"Elasticsearch MCP access failed{error_detail}. "
+            "Kibana fallback query provided instead."
+        )
+        logger.warning("Traffic agent kibana_fallback – %s", call_error)
+        answer = await _naturalize_fallback(
+            chatmodel, context, "traffic", "kibana_fallback",
+            result.errors, result.kibana_payload,
+        )
+    else:
+        call_error = (
+            "; ".join(result.errors)
+            if result.errors
+            else "Traffic agent failed with unknown error."
+        )
+        logger.error("Traffic agent failed – %s", call_error)
+        answer = await _naturalize_fallback(
+            chatmodel, context, "traffic", "failed",
+            result.errors, None,
+        )
+
+    return {**state, "subagent_answer": answer, "call_error": call_error}
+
+
+async def invoke_blocked_agent_node(
+    state: IllumioExpertState,
+    blocked_agent: IllumioBlockedAgent,
+    chatmodel: ChatOpenAI,
+) -> IllumioExpertState:
+    """Delegate to the IllumioBlockedAgent sub-agent."""
+    logger.info("Node: invoke_blocked_agent")
+    messages = state.get("messages", [])
+    user_request = _last_human_message(messages)
+    context = _format_conversation_context(messages)
+    enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
+
+    try:
+        result = await blocked_agent.run(enriched)
+    except Exception as exc:
+        logger.exception("Blocked agent run raised an unexpected exception")
+        call_error = f"Blocked-flows agent crashed unexpectedly: {exc}"
+        return {
+            **state,
+            "subagent_answer": await _naturalize_fallback(
+                chatmodel, context, "blocked", "failed", [call_error], None
+            ),
+            "call_error": call_error,
+        }
+
+    call_error: str | None = None
+    if result.mode == "answered" and result.answer:
+        answer = await _adapt_language(chatmodel, context, result.answer)
+    elif result.mode == "kibana_fallback" and result.kibana_payload:
+        error_detail = (": " + "; ".join(result.errors)) if result.errors else ""
+        call_error = (
+            f"Elasticsearch MCP access failed{error_detail}. "
+            "Kibana fallback query provided instead."
+        )
+        logger.warning("Blocked agent kibana_fallback – %s", call_error)
+        answer = await _naturalize_fallback(
+            chatmodel, context, "blocked", "kibana_fallback",
+            result.errors, result.kibana_payload,
+        )
+    else:
+        call_error = (
+            "; ".join(result.errors)
+            if result.errors
+            else "Blocked-flows agent failed with unknown error."
+        )
+        logger.error("Blocked agent failed – %s", call_error)
+        answer = await _naturalize_fallback(
+            chatmodel, context, "blocked", "failed",
+            result.errors, None,
+        )
+
+    return {**state, "subagent_answer": answer, "call_error": call_error}
+
+
+async def invoke_consumers_agent_node(
+    state: IllumioExpertState,
+    consumers_agent: IllumioConsumersAgent,
+    chatmodel: ChatOpenAI,
+) -> IllumioExpertState:
+    """Delegate to the IllumioConsumersAgent sub-agent."""
+    logger.info("Node: invoke_consumers_agent")
+    messages = state.get("messages", [])
+    user_request = _last_human_message(messages)
+    context = _format_conversation_context(messages)
+    enriched = _enrich_request(user_request, state.get("ap_code"), state.get("hostname"))
+
+    try:
+        result = await consumers_agent.run(enriched)
+    except Exception as exc:
+        logger.exception("Consumers agent run raised an unexpected exception")
+        call_error = f"Service-consumers agent crashed unexpectedly: {exc}"
+        return {
+            **state,
+            "subagent_answer": await _naturalize_fallback(
+                chatmodel, context, "consumers", "failed", [call_error], None
+            ),
+            "call_error": call_error,
+        }
+
+    call_error: str | None = None
+    if result.mode == "answered" and result.answer:
+        answer = await _adapt_language(chatmodel, context, result.answer)
+    elif result.mode == "kibana_fallback" and result.kibana_payload:
+        error_detail = (": " + "; ".join(result.errors)) if result.errors else ""
+        call_error = (
+            f"Elasticsearch MCP access failed{error_detail}. "
+            "Kibana fallback query provided instead."
+        )
+        logger.warning("Consumers agent kibana_fallback – %s", call_error)
+        answer = await _naturalize_fallback(
+            chatmodel, context, "consumers", "kibana_fallback",
+            result.errors, result.kibana_payload,
+        )
+    else:
+        call_error = (
+            "; ".join(result.errors)
+            if result.errors
+            else "Service-consumers agent failed with unknown error."
+        )
+        logger.error("Consumers agent failed – %s", call_error)
+        answer = await _naturalize_fallback(
+            chatmodel, context, "consumers", "failed",
+            result.errors, None,
+        )
+
+    return {**state, "subagent_answer": answer, "call_error": call_error}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node: Unknown intent
+# Node: Direct LLM answer (general Illumio knowledge)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def handle_unknown_node(state: IllumioExpertState) -> IllumioExpertState:
-    """Return a helpful out-of-scope message."""
-    logger.info("Node: handle_unknown (expert)")
-    reason = state.get("unknown_reason") or "Intent not recognised."
-    return {
-        **state,
-        "answer": format_unknown_answer(reason),
-        "stage":  IllumioExpertStage.UNKNOWN,
-    }
+async def answer_directly_node(
+    state: IllumioExpertState, chatmodel: ChatOpenAI
+) -> IllumioExpertState:
+    """Answer a general Illumio question directly from the LLM's domain knowledge."""
+    logger.info("Node: answer_directly")
+    messages = state.get("messages", [])
+
+    # Feed the full conversation to the LLM with the expert system prompt
+    llm_messages: list[BaseMessage] = [SystemMessage(content=ILLUMIO_EXPERT_SYSTEM_PROMPT)]
+    llm_messages.extend(messages)
+
+    try:
+        response: AIMessage = await chatmodel.ainvoke(llm_messages)
+        return {**state, "subagent_answer": response.content, "call_error": None}
+    except Exception as exc:
+        logger.exception("Direct LLM answer failed")
+        call_error = f"Direct answer LLM call failed: {exc}"
+        return {
+            **state,
+            "subagent_answer": "Je suis désolé, je ne suis pas en mesure de traiter votre demande pour le moment.",
+            "call_error": call_error,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node: Compose final response
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def compose_response_node(state: IllumioExpertState) -> IllumioExpertState:
+    """Append the answer as an AIMessage to the conversation history."""
+    logger.info("Node: compose_response")
+    answer = state.get("subagent_answer") or "I was unable to process your request."
+    # Returning {"messages": [...]} causes add_messages to *append* the new
+    # AIMessage to the existing list rather than replacing it.
+    return {**state, "messages": [AIMessage(content=answer)]}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Conditional routing
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _route_after_intent(state: IllumioExpertState) -> str:
-    if state.get("stage") == IllumioExpertStage.FAILED:
-        return "fail"
-    intent = state.get("intent", "unknown")
-    routes = {
-        "traffic_analysis": "traffic",
-        "blocked_flows":     "blocked",
-        "consumers":         "consumers",
-        "query_builder":     "query_builder",
-    }
-    return routes.get(intent, "unknown")
+def _route_by_intent(state: IllumioExpertState) -> str:
+    return state.get("intent", "general")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -376,276 +507,158 @@ def _route_after_intent(state: IllumioExpertState) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_illumio_expert_graph(
-    chatmodel:       ChatOpenAI,
-    mcp_client:      Any,
-    traffic_agent:   IllumioTrafficAgent   | None = None,
-    blocked_agent:   IllumioBlockedAgent   | None = None,
-    consumers_agent: IllumioConsumersAgent | None = None,
-    qb_sub_agent:    IllumioQueryBuilderSubAgent | None = None,
+    chatmodel: ChatOpenAI,
+    traffic_agent: IllumioTrafficAgent,
+    blocked_agent: IllumioBlockedAgent,
+    consumers_agent: IllumioConsumersAgent,
 ) -> Any:
-    """
-    Construct and compile the Illumio Expert StateGraph.
+    """Construct and compile the Illumio Expert conversational StateGraph."""
 
-    Specialist agents are instantiated here when not supplied, so the graph
-    can be wired from the entry-point with just *chatmodel* and *mcp_client*.
+    # ── Close over dependencies for each node ──
 
-    The intent-classification prompt is built dynamically from
-    ``qb_sub_agent.describe_skills()``, so the expert's knowledge of the
-    QueryBuilder's interface is always current.
+    async def _classify_intent(s: IllumioExpertState) -> IllumioExpertState:
+        return await classify_intent_node(s, chatmodel)
 
-    Graph layout::
+    async def _invoke_traffic(s: IllumioExpertState) -> IllumioExpertState:
+        return await invoke_traffic_agent_node(s, traffic_agent, chatmodel)
 
-        parse_intent
-            │
-            ├─ traffic_analysis  → answer_traffic       → END
-            ├─ blocked_flows     → answer_blocked        → END
-            ├─ consumers         → answer_consumers      → END
-            ├─ query_builder     → answer_query_builder  → END
-            ├─ unknown           → handle_unknown        → END
-            └─ fail              → END
-    """
-    # ── Instantiate specialist agents if not provided ────────────────────────
-    if traffic_agent is None:
-        traffic_agent = IllumioTrafficAgent(
-            mcp_client=mcp_client,
-            chatmodel=chatmodel,
-            cfg=_CFG.get("illumio_agent", {}),
-        )
-    if blocked_agent is None:
-        blocked_agent = IllumioBlockedAgent(
-            mcp_client=mcp_client,
-            chatmodel=chatmodel,
-            cfg=_CFG.get("illumio_blocked_agent", {}),
-        )
-    if consumers_agent is None:
-        consumers_agent = IllumioConsumersAgent(
-            mcp_client=mcp_client,
-            chatmodel=chatmodel,
-            cfg=_CFG.get("illumio_consumers_agent", {}),
-        )
-    if qb_sub_agent is None:
-        qb_sub_agent = IllumioQueryBuilderSubAgent(
-            mcp_client=mcp_client,
-            cfg=_CFG.get("illumio_query_builder", {}),
-        )
+    async def _invoke_blocked(s: IllumioExpertState) -> IllumioExpertState:
+        return await invoke_blocked_agent_node(s, blocked_agent, chatmodel)
 
-    # ── Build intent prompt from QB sub-agent's skills descriptor ────────────
-    qb_skill      = qb_sub_agent.describe_skills()[0]
-    system_prompt = build_expert_intent_prompt(qb_skill)
+    async def _invoke_consumers(s: IllumioExpertState) -> IllumioExpertState:
+        return await invoke_consumers_agent_node(s, consumers_agent, chatmodel)
 
-    logger.info(
-        "Expert agent intent prompt built from QueryBuilder skill '%s'",
-        qb_skill.get("name"),
-    )
+    async def _answer_directly(s: IllumioExpertState) -> IllumioExpertState:
+        return await answer_directly_node(s, chatmodel)
 
-    # ── Node closures ─────────────────────────────────────────────────────────
-    async def _parse_intent(s: IllumioExpertState) -> IllumioExpertState:
-        return await parse_intent_node(s, chatmodel, system_prompt)
-
-    async def _answer_traffic(s: IllumioExpertState) -> IllumioExpertState:
-        return await answer_traffic_node(s, traffic_agent)
-
-    async def _answer_blocked(s: IllumioExpertState) -> IllumioExpertState:
-        return await answer_blocked_node(s, blocked_agent)
-
-    async def _answer_consumers(s: IllumioExpertState) -> IllumioExpertState:
-        return await answer_consumers_node(s, consumers_agent)
-
-    async def _answer_query_builder(s: IllumioExpertState) -> IllumioExpertState:
-        return await answer_query_builder_node(s, qb_sub_agent)
-
-    # ── Graph wiring ──────────────────────────────────────────────────────────
+    # ── Build the graph ──
     graph = StateGraph(IllumioExpertState)
 
-    graph.add_node("parse_intent",          _parse_intent)
-    graph.add_node("answer_traffic",        _answer_traffic)
-    graph.add_node("answer_blocked",        _answer_blocked)
-    graph.add_node("answer_consumers",      _answer_consumers)
-    graph.add_node("answer_query_builder",  _answer_query_builder)
-    graph.add_node("handle_unknown",        handle_unknown_node)
+    graph.add_node("classify_intent",  _classify_intent)
+    graph.add_node("invoke_traffic",   _invoke_traffic)
+    graph.add_node("invoke_blocked",   _invoke_blocked)
+    graph.add_node("invoke_consumers", _invoke_consumers)
+    graph.add_node("answer_directly",  _answer_directly)
+    graph.add_node("compose_response", compose_response_node)
 
-    graph.set_entry_point("parse_intent")
+    graph.set_entry_point("classify_intent")
 
     graph.add_conditional_edges(
-        "parse_intent",
-        _route_after_intent,
+        "classify_intent",
+        _route_by_intent,
         {
-            "traffic":       "answer_traffic",
-            "blocked":       "answer_blocked",
-            "consumers":     "answer_consumers",
-            "query_builder": "answer_query_builder",
-            "unknown":       "handle_unknown",
-            "fail":          END,
+            "traffic":   "invoke_traffic",
+            "blocked":   "invoke_blocked",
+            "consumers": "invoke_consumers",
+            "general":   "answer_directly",
         },
     )
 
-    graph.add_edge("answer_traffic",       END)
-    graph.add_edge("answer_blocked",       END)
-    graph.add_edge("answer_consumers",     END)
-    graph.add_edge("answer_query_builder", END)
-    graph.add_edge("handle_unknown",       END)
+    for node in ("invoke_traffic", "invoke_blocked", "invoke_consumers", "answer_directly"):
+        graph.add_edge(node, "compose_response")
+
+    graph.add_edge("compose_response", END)
 
     return graph.compile()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Result
-# ─────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class IllumioExpertResult:
-    """Structured output from an Illumio Expert agent run."""
-
-    user_request:   str
-    intent:         str | None
-    answer:         str | None
-    kibana_payload: str | None
-    stage:          IllumioExpertStage
-    mode:           Literal["answered", "unknown", "failed"]
-    errors:         list[str]
-
-    @classmethod
-    def from_state(cls, state: IllumioExpertState) -> "IllumioExpertResult":
-        all_errors: list[str] = []
-        for key in ("error", "intent_error"):
-            val = state.get(key)
-            if val:
-                all_errors.append(val)
-
-        stage = state.get("stage", IllumioExpertStage.FAILED)
-        if stage == IllumioExpertStage.ANSWERED:
-            mode = "answered"
-        elif stage == IllumioExpertStage.UNKNOWN:
-            mode = "unknown"
-        else:
-            mode = "failed"
-
-        return cls(
-            user_request=state.get("user_request", ""),
-            intent=state.get("intent"),
-            answer=state.get("answer"),
-            kibana_payload=state.get("kibana_payload"),
-            stage=stage,
-            mode=mode,
-            errors=all_errors,
-        )
-
-    def summary(self) -> str:
-        lines = [
-            "Illumio Expert Agent Result",
-            f"  Mode:    {self.mode}",
-            f"  Stage:   {self.stage.value}",
-            f"  Intent:  {self.intent or '(none)'}",
-        ]
-
-        if self.answer:
-            lines.append("")
-            lines.append("  Answer:")
-            for line in self.answer.split("\n"):
-                lines.append(f"    {line}")
-
-        if self.errors:
-            lines.append(f"\n  Errors ({len(self.errors)}):")
-            for e in self.errors[:10]:
-                lines.append(f"    - {e}")
-
-        return "\n".join(lines)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Orchestrator
+# Orchestrator (high-level Python API)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class IllumioExpertAgent:
     """
-    High-level orchestrator for the Illumio Expert Agent.
+    High-level orchestrator for the Illumio Expert conversational agent.
 
-    Routes every Illumio-related natural-language question to the most
-    appropriate specialist sub-agent:
+    This is the single entry point for all Illumio-related questions.
+    It internally delegates to specialised sub-agents for data queries or
+    answers directly from domain knowledge.
 
-    +-----------------------+-------------------------------+
-    | Intent                | Specialist called             |
-    +-----------------------+-------------------------------+
-    | traffic_analysis      | IllumioTrafficAgent           |
-    | blocked_flows         | IllumioBlockedAgent           |
-    | consumers             | IllumioConsumersAgent         |
-    | query_builder         | IllumioQueryBuilderSubAgent   |
-    | unknown               | (out-of-scope reply)          |
-    +-----------------------+-------------------------------+
-
-    The QueryBuilder sub-agent's ``describe_skills()`` output is used at
-    construction time to build the intent-classification prompt, ensuring the
-    expert always knows the sub-agent's exact parameter interface.
-
-    Usage::
+    Single-turn usage::
 
         agent = IllumioExpertAgent(mcp_client=MCP_CLIENT, chatmodel=chatmodel)
+        answer = await agent.chat("Qu'est-ce que le mode d'enforcement Selective ?")
 
-        # Natural-language question → automatic routing
-        result = await agent.run(
-            "Quels flux bloqués y a-t-il vers l'application AP12345 ?"
-        )
-        print(result.summary())
+    Multi-turn usage::
 
-        # Structured query → routed to QueryBuilder sub-agent
-        result = await agent.run(
-            "Montre-moi les flux Blocked depuis A_AP12345- en HPROD "
-            "sur les 7 derniers jours, agrégés par destination."
+        agent = IllumioExpertAgent(mcp_client=MCP_CLIENT, chatmodel=chatmodel)
+        history: list[BaseMessage] = []
+
+        history, answer = await agent.chat_with_history(
+            "Est-ce que j'ai du trafic dev→prod pour AP12345 ?", history
         )
-        print(result.summary())
+        history, answer = await agent.chat_with_history(
+            "Et les connexion bloqués pour la même application ?", history
+        )
     """
 
-    def __init__(
-        self,
-        mcp_client:      Any,
-        chatmodel:       ChatOpenAI,
-        traffic_agent:   IllumioTrafficAgent   | None = None,
-        blocked_agent:   IllumioBlockedAgent   | None = None,
-        consumers_agent: IllumioConsumersAgent | None = None,
-        qb_sub_agent:    IllumioQueryBuilderSubAgent | None = None,
-    ) -> None:
-        self.mcp_client = mcp_client
-        self.chatmodel  = chatmodel
+    def __init__(self, mcp_client: Any, chatmodel: ChatOpenAI) -> None:
+        self.chatmodel       = chatmodel
+        self.traffic_agent   = IllumioTrafficAgent(mcp_client=mcp_client, chatmodel=chatmodel)
+        self.blocked_agent   = IllumioBlockedAgent(mcp_client=mcp_client, chatmodel=chatmodel)
+        self.consumers_agent = IllumioConsumersAgent(mcp_client=mcp_client, chatmodel=chatmodel)
         self.graph = build_illumio_expert_graph(
             chatmodel=chatmodel,
-            mcp_client=mcp_client,
-            traffic_agent=traffic_agent,
-            blocked_agent=blocked_agent,
-            consumers_agent=consumers_agent,
-            qb_sub_agent=qb_sub_agent,
+            traffic_agent=self.traffic_agent,
+            blocked_agent=self.blocked_agent,
+            consumers_agent=self.consumers_agent,
         )
 
-    async def run(self, request: str) -> IllumioExpertResult:
-        """
-        Route *request* to the appropriate specialist and return the result.
+    async def chat(self, user_message: str) -> str:
+        """Single-turn: process one message and return the answer string."""
+        initial: IllumioExpertState = {
+            "messages":        [HumanMessage(content=user_message)],
+            "intent":          None,
+            "subagent_answer": None,
+            "error":           None,
+            "call_error":      None,
+            "ap_code":         None,
+            "hostname":        None,
+        }
+        final = await self.graph.ainvoke(initial)
+        for msg in reversed(final.get("messages", [])):
+            if isinstance(msg, AIMessage):
+                return msg.content
+        return "I was unable to process your request."
 
-        Parameters
-        ----------
-        request:
-            Natural-language question about Illumio network flows.
+    async def chat_with_history(
+        self,
+        user_message: str,
+        history: list[BaseMessage],
+        ap_code:  str | None = None,
+        hostname: str | None = None,
+    ) -> tuple[list[BaseMessage], str, str | None, str | None, str | None]:
+        """Multi-turn: process one message with existing history.
 
-        Returns
-        -------
-        IllumioExpertResult
-            Contains ``intent``, ``answer``, optional ``kibana_payload``,
-            and status information.
+        Accepts and returns ``ap_code`` / ``hostname`` so callers can persist
+        them across turns without re-parsing the message themselves.
+
+        Returns ``(updated_messages, answer, ap_code, hostname, call_error)``.
+        ``call_error`` is ``None`` on success, or a human-readable description
+        of what went wrong when a sub-agent fell back to Kibana or failed.
         """
         initial: IllumioExpertState = {
-            "user_request":       request,
-            "intent":             None,
-            "intent_error":       None,
-            "unknown_reason":     None,
-            "qb_source_app":      None,
-            "qb_destination_app": None,
-            "qb_policy_decision": None,
-            "qb_time_range":      None,
-            "qb_env":             None,
-            "qb_aggs":            None,
-            "answer":             None,
-            "kibana_payload":     None,
-            "stage": IllumioExpertStage.INIT,
-            "error": None,
+            "messages":        [*history, HumanMessage(content=user_message)],
+            "intent":          None,
+            "subagent_answer": None,
+            "error":           None,
+            "call_error":      None,
+            "ap_code":         ap_code,
+            "hostname":        hostname,
         }
-        logger.info("Illumio Expert Agent: %s", request[:120])
         final = await self.graph.ainvoke(initial)
-        return IllumioExpertResult.from_state(final)
+        final_messages = final.get("messages", initial["messages"])
+
+        answer = "I was unable to process your request."
+        for msg in reversed(final_messages):
+            if isinstance(msg, AIMessage):
+                answer = msg.content
+                break
+
+        return (
+            final_messages,
+            answer,
+            final.get("ap_code"),
+            final.get("hostname"),
+            final.get("call_error"),
+        )
